@@ -1,6 +1,6 @@
 # ============================
 # AllanBell3D Tasmota Bulk Tool (Cross-Platform GUI)
-# Version 0.1.2a
+# Version 0.1.2b
 # ============================
 
 import sys, os, json, asyncio, re, time
@@ -12,7 +12,8 @@ from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QGroupBox, QPushButton, QTextEdit, QSpinBox, QFileDialog,
     QProgressBar, QMessageBox, QDialog, QTableWidget,
-    QTableWidgetItem, QCheckBox, QHeaderView, QLineEdit, QSizePolicy
+    QTableWidgetItem, QCheckBox, QHeaderView, QLineEdit, QSizePolicy,
+    QAbstractItemView
 )
 
 import httpx
@@ -21,7 +22,7 @@ import pandas as pd
 # ============================
 # Defaults / constants
 # ============================
-APP_VERSION      = "0.1.2a"
+APP_VERSION      = "0.1.2b"
 APP_TITLE        = f"AllanBell3D Tasmota Bulk Tool (Cross-Platform GUI) {APP_VERSION}"
 DEFAULT_THREADS  = 100
 DEFAULT_TIMEOUT  = 1
@@ -30,28 +31,30 @@ DEFAULT_BACKOFF  = 1.0
 DEFAULT_XLSX     = "tasmota_hardware_summary.xlsx"
 DEFAULT_CSV      = "tasmota_hardware_summary.csv"
 
-DEFAULT_COMMANDS = [
-    "mqtthost 192.168.64.5",
-    "mqttuser villa",
-    "mqttpassword villa",
-    "FullTopic %prefix%/%topic%/",
-    "TelePeriod 10",
-    "latitude 25.163853",
-    "longitude 55.219098",
-    "timezone +4",
-    "powerretain on",
-    "wattres 2",
-    "EnergyRes 2",
-    "AmpRes 2",
-    "switchretain off",
-    "buttonretain off",
-    "poweronstate 3",
-    "SetOption56 1",
-    "SetOption57 1",
-    "SetOption59 1",
-    "SetOption65 1",
-    "WifiConfig 5",
+COMMAND_LIBRARY = [
+    ("mqtthost 192.168.64.5", "Set the MQTT broker hostname."),
+    ("mqttuser villa", "Set the MQTT username."),
+    ("mqttpassword villa", "Set the MQTT password."),
+    ("FullTopic %prefix%/%topic%/", "Configure the MQTT topic template."),
+    ("TelePeriod 10", "Publish telemetry every 10 seconds."),
+    ("latitude 25.163853", "Set device latitude."),
+    ("longitude 55.219098", "Set device longitude."),
+    ("timezone +4", "Set timezone offset."),
+    ("powerretain on", "Retain power state over MQTT."),
+    ("wattres 2", "Set watt resolution to 2 decimals."),
+    ("EnergyRes 2", "Set energy resolution to 2 decimals."),
+    ("AmpRes 2", "Set ampere resolution to 2 decimals."),
+    ("switchretain off", "Disable switch retain."),
+    ("buttonretain off", "Disable button retain."),
+    ("poweronstate 3", "Restore last power state after reboot."),
+    ("SetOption56 1", "Enable instantaneous energy updates."),
+    ("SetOption57 1", "Enable cumulative energy updates."),
+    ("SetOption59 1", "Set switch mode to follow relay state."),
+    ("SetOption65 1", "Enable device LED for Wi-Fi status."),
+    ("WifiConfig 5", "Enable Wi-Fi SmartConfig and WPS."),
 ]
+
+DEFAULT_COMMANDS = [cmd for cmd, _ in COMMAND_LIBRARY]
 
 DEFAULT_IP_RANGES = """192.168.60.10-254
 192.168.62.10-254
@@ -581,6 +584,75 @@ class SelectionWindow(QDialog):
 # ============================
 # GUI
 # ============================
+class CommandLibraryDialog(QDialog):
+    def __init__(self, parent=None, commands=None):
+        super().__init__(parent)
+        self.setWindowTitle("Command Library")
+        self.resize(600, 400)
+        self.selected_commands = []
+        self.commands = list(commands or COMMAND_LIBRARY)
+
+        layout = QVBoxLayout(self)
+
+        self.filter_edit = QLineEdit()
+        self.filter_edit.setPlaceholderText("Filter commands…")
+        layout.addWidget(self.filter_edit)
+
+        self.table = QTableWidget(len(self.commands), 2)
+        self.table.setHorizontalHeaderLabels(["Command", "Description"])
+        self.table.horizontalHeader().setStretchLastSection(True)
+        self.table.verticalHeader().setVisible(False)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.MultiSelection)
+        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.table.setAlternatingRowColors(True)
+        for row, (command, description) in enumerate(self.commands):
+            self.table.setItem(row, 0, QTableWidgetItem(command))
+            self.table.setItem(row, 1, QTableWidgetItem(description))
+        layout.addWidget(self.table)
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch(1)
+        self.btn_insert = QPushButton("Insert")
+        self.btn_insert.clicked.connect(self.accept)
+        self.btn_cancel = QPushButton("Cancel")
+        self.btn_cancel.clicked.connect(self.reject)
+        btn_row.addWidget(self.btn_insert)
+        btn_row.addWidget(self.btn_cancel)
+        layout.addLayout(btn_row)
+
+        self.filter_edit.textChanged.connect(self.apply_filter)
+        self.table.itemDoubleClicked.connect(self.on_item_double_clicked)
+
+    def apply_filter(self, text):
+        query = (text or "").strip().lower()
+        for row in range(self.table.rowCount()):
+            if not query:
+                self.table.setRowHidden(row, False)
+                continue
+            command = self.table.item(row, 0).text().lower() if self.table.item(row, 0) else ""
+            description = self.table.item(row, 1).text().lower() if self.table.item(row, 1) else ""
+            match = query in command or query in description
+            self.table.setRowHidden(row, not match)
+
+    def on_item_double_clicked(self, _item):
+        self.accept()
+
+    def accept(self):
+        selection = self.table.selectionModel().selectedRows()
+        seen = set()
+        self.selected_commands = []
+        for index in selection:
+            cmd_item = self.table.item(index.row(), 0)
+            if not cmd_item:
+                continue
+            command = cmd_item.text()
+            if command not in seen:
+                seen.add(command)
+                self.selected_commands.append(command)
+        super().accept()
+
+
 class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
@@ -617,8 +689,10 @@ class MainWindow(QWidget):
 
         v.addWidget(QLabel("IP ranges:")); self.txt_ranges = QTextEdit()
         self.txt_ranges.setPlainText(DEFAULT_IP_RANGES); v.addWidget(self.txt_ranges)
+
         cmd_header = QHBoxLayout()
-        cmd_header.addWidget(QLabel("Commands:"))
+        self.lbl_commands = QLabel("Commands:")
+        cmd_header.addWidget(self.lbl_commands)
         cmd_header.addStretch(1)
         self.btn_cmd_library = QPushButton("Command Library…")
         self.btn_cmd_library.clicked.connect(self.open_command_library)
@@ -630,7 +704,7 @@ class MainWindow(QWidget):
         self.txt_cmds.setContextMenuPolicy(Qt.CustomContextMenu)
         self.txt_cmds.customContextMenuRequested.connect(self.show_cmd_context_menu)
         self.txt_cmds.installEventFilter(self)
-        self.btn_cmd_library.setEnabled(self.txt_cmds.isEnabled())
+        self._sync_command_library_button_state()
 
         bh = QHBoxLayout()
         self.btn_start = QPushButton("Start Scan"); self.btn_start.clicked.connect(self.on_start)
@@ -735,11 +809,24 @@ class MainWindow(QWidget):
         menu.exec(self.txt_cmds.mapToGlobal(pos))
 
     def open_command_library(self):
-        QMessageBox.information(self, "Command Library", "Command library interface coming soon.")
+        dialog = CommandLibraryDialog(self, COMMAND_LIBRARY)
+        if dialog.exec() == QDialog.Accepted and dialog.selected_commands:
+            current_text = self.txt_cmds.toPlainText()
+            existing_lines = current_text.splitlines()
+            existing_set = {line.strip() for line in existing_lines if line.strip()}
+            to_append = [cmd for cmd in dialog.selected_commands if cmd.strip() not in existing_set]
+            if to_append:
+                if current_text and not current_text.endswith("\n"):
+                    current_text += "\n"
+                current_text += "\n".join(to_append)
+                self.txt_cmds.setPlainText(current_text)
+
+    def _sync_command_library_button_state(self):
+        self.btn_cmd_library.setEnabled(self.txt_cmds.isEnabled())
 
     def eventFilter(self, source, event):
         if source is self.txt_cmds and event.type() == QEvent.EnabledChange:
-            self.btn_cmd_library.setEnabled(self.txt_cmds.isEnabled())
+            self._sync_command_library_button_state()
         return super().eventFilter(source, event)
 
     # ----- Core actions -----
