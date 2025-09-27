@@ -1,4 +1,4 @@
-﻿# Tasmota Bulk Tool (Cross-Platform GUI)
+# Tasmota Bulk Tool (Cross-Platform GUI)
 
 Cross-platform **PySide6 GUI tool** to manage Tasmota devices in bulk on LAN.
 
@@ -15,7 +15,7 @@ Cross-platform **PySide6 GUI tool** to manage Tasmota devices in bulk on LAN.
 ---
 
 ## Versioning
-- **Current:** `v0.1.1a (beta)`  
+- **Current:** $TagName  
 - **Roadmap:** Command library for easy configuration  
 
 ---
@@ -29,7 +29,7 @@ python tasmota_gui.py
 
 ## Agents Overview (Detailed)
 
-This project â€” **AllanBell3D Tasmota Bulk Tool (Cross-Platform GUI)** â€” manages bulk operations on Tasmota devices.  
+This project — **AllanBell3D Tasmota Bulk Tool (Cross-Platform GUI)** — manages bulk operations on Tasmota devices.  
 It uses a modular architecture where each **agent** has a clear role.
 
 ### GUI Agent
@@ -61,7 +61,7 @@ Stores reusable Tasmota commands. Provides filtering and selection in the GUI.
 
 ## Agents Overview (Summary)
 
-This project â€” **AllanBell3D Tasmota Bulk Tool (Cross-Platform GUI)** â€” manages bulk operations on Tasmota devices.  
+This project — **AllanBell3D Tasmota Bulk Tool (Cross-Platform GUI)** — manages bulk operations on Tasmota devices.  
 It uses a modular architecture where each **agent** has a clear role.
 
 ### Agents
@@ -98,5 +98,4 @@ For detailed documentation, see [AGENTS.md](AGENTS.md).
 - 2025-09-27 0.1.2b: Added Preliminary Command Library
 - 2025-09-27 0.1.2c: Linked Command Library To JSON database. Added selection fields, filtering by command name and description. 
 - 2025-09-27 0.1.2d: Improved Commands Library window layout and added horizonal scroll bar.
-- 2025-09-27 : Added Category column to Command Library in order to facilitate filtering and loaded values from JSON command database
-- 2025-09-27 : Added Category column to Command Library in order to facilitate filtering and loaded values from JSON command database
+- 2025-09-27 v.0.1.2e: Added "Category" column to Command Library in order to facilitate filtering and loaded values from JSON command database.
