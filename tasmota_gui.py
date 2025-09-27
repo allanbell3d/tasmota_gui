@@ -1,6 +1,6 @@
 # ============================
 # AllanBell3D Tasmota Bulk Tool (Cross-Platform GUI)
-# Version 0.1.2d
+# Version 0.1.2e
 # ============================
 
 import sys, os, json, asyncio, re, time
@@ -139,17 +139,35 @@ def load_command_library_from_json(parent=None):
     records = []
     for entry in data:
         record = {}
+        raw_category = ""
         if isinstance(entry, dict):
-            command_name = entry.get("command") or entry.get("name") or entry.get("cmd") or entry.get("keyword")
-            default_value = entry.get("value")
+            normalized = {}
+            for key, value in entry.items():
+                if isinstance(key, str):
+                    normalized.setdefault(key.lower(), value)
+
+            def _get(*candidates):
+                for key in candidates:
+                    if key in entry:
+                        return entry[key]
+                for key in candidates:
+                    lower_key = key.lower() if isinstance(key, str) else key
+                    if isinstance(lower_key, str) and lower_key in normalized:
+                        return normalized[lower_key]
+                return None
+
+            command_name = _get("command", "name", "cmd", "keyword")
+            default_value = _get("value")
             if default_value is None:
-                default_value = entry.get("default")
-            description = entry.get("description") or entry.get("desc") or entry.get("details")
+                default_value = _get("default")
+            description = _get("description", "desc", "details")
+            raw_category = _get("category", "section")
             record["metadata"] = dict(entry)
         elif isinstance(entry, (list, tuple)):
             command_name = entry[0] if entry else ""
             default_value = entry[1] if len(entry) > 1 else ""
             description = entry[2] if len(entry) > 2 else ""
+            raw_category = entry[3] if len(entry) > 3 else ""
             record["metadata"] = {"raw": list(entry)}
         else:
             continue
@@ -170,10 +188,23 @@ def load_command_library_from_json(parent=None):
 
         description = "" if description is None else str(description)
 
+        if raw_category is None:
+            category = ""
+        else:
+            try:
+                category = str(raw_category)
+            except Exception:
+                category = ""
+            else:
+                category = category.strip()
+        if not category:
+            category = ""
+
         record.update({
             "name": command_name,
             "value": default_value,
             "description": description,
+            "category": category,
         })
         records.append(record)
 
@@ -660,9 +691,10 @@ class SelectionWindow(QDialog):
 # ============================
 class CommandLibraryDialog(QDialog):
     COLUMN_CHECK = 0
-    COLUMN_COMMAND = 1
-    COLUMN_VALUE = 2
-    COLUMN_DESCRIPTION = 3
+    COLUMN_CATEGORY = 1
+    COLUMN_COMMAND = 2
+    COLUMN_VALUE = 3
+    COLUMN_DESCRIPTION = 4
 
     def __init__(self, parent=None, commands=None):
         super().__init__(parent)
@@ -688,11 +720,12 @@ class CommandLibraryDialog(QDialog):
 
         layout.addLayout(filter_row)
 
-        self.table = QTableWidget(len(self.commands), 4)
-        self.table.setHorizontalHeaderLabels(["Select", "Command", "Value", "Description"])
+        self.table = QTableWidget(len(self.commands), 5)
+        self.table.setHorizontalHeaderLabels(["Select", "Category", "Command", "Value", "Description"])
         header = self.table.horizontalHeader()
         header.setStretchLastSection(False)
         header.setSectionResizeMode(self.COLUMN_CHECK, QHeaderView.Fixed)
+        header.setSectionResizeMode(self.COLUMN_CATEGORY, QHeaderView.Interactive)
         header.setSectionResizeMode(self.COLUMN_COMMAND, QHeaderView.Interactive)
         header.setSectionResizeMode(self.COLUMN_VALUE, QHeaderView.Interactive)
         header.setSectionResizeMode(self.COLUMN_DESCRIPTION, QHeaderView.Interactive)
@@ -716,6 +749,7 @@ class CommandLibraryDialog(QDialog):
 
         for row, record in enumerate(self.commands):
             command = record.get("name", "") if isinstance(record, dict) else ""
+            category = record.get("category", "") if isinstance(record, dict) else ""
             value = record.get("value", "") if isinstance(record, dict) else ""
             description = record.get("description", "") if isinstance(record, dict) else ""
 
@@ -740,6 +774,12 @@ class CommandLibraryDialog(QDialog):
             command_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
             command_item.setToolTip(command)
             self.table.setItem(row, self.COLUMN_COMMAND, command_item)
+
+            category_item = QTableWidgetItem(category)
+            category_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+            category_item.setToolTip(category)
+            category_item.setTextAlignment(Qt.AlignCenter)
+            self.table.setItem(row, self.COLUMN_CATEGORY, category_item)
 
             value_item = QTableWidgetItem(value)
             value_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsEditable)
@@ -826,7 +866,20 @@ class CommandLibraryDialog(QDialog):
         header.resizeSection(self.COLUMN_CHECK, checkbox_width)
         self.table.setColumnWidth(self.COLUMN_CHECK, checkbox_width)
 
-        available_width = viewport_width - checkbox_width
+        category_header_item = self.table.horizontalHeaderItem(self.COLUMN_CATEGORY)
+        category_label = category_header_item.text() if category_header_item else "Category"
+        category_text_width = self.table.fontMetrics().horizontalAdvance(category_label)
+        category_min = max(category_text_width + 16, 96)
+        category_width = header.sectionSize(self.COLUMN_CATEGORY)
+        if category_width <= 0:
+            category_width = category_min
+        else:
+            category_width = max(category_width, category_min)
+
+        header.resizeSection(self.COLUMN_CATEGORY, category_width)
+        self.table.setColumnWidth(self.COLUMN_CATEGORY, category_width)
+
+        available_width = viewport_width - (checkbox_width + category_width)
         if available_width <= 0:
             QTimer.singleShot(0, self._update_initial_column_widths)
             return

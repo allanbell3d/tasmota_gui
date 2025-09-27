@@ -1,0 +1,67 @@
+diff a/tasmota_gui.py b/tasmota_gui.py	(rejected hunks)
+@@ -804,51 +844,64 @@ class CommandLibraryDialog(QDialog):
+             return
+ 
+         viewport = self.table.viewport()
+         if viewport is None:
+             QTimer.singleShot(0, self._update_initial_column_widths)
+             return
+ 
+         viewport_width = viewport.width()
+         if viewport_width <= 0:
+             QTimer.singleShot(0, self._update_initial_column_widths)
+             return
+ 
+         vertical_scrollbar = self.table.verticalScrollBar()
+         if vertical_scrollbar and vertical_scrollbar.isVisible():
+             viewport_width -= vertical_scrollbar.width()
+ 
+         header = self.table.horizontalHeader()
+         if header is None:
+             QTimer.singleShot(0, self._update_initial_column_widths)
+             return
+ 
+         checkbox_width = max(header.sectionSize(self.COLUMN_CHECK), 68)
+         header.resizeSection(self.COLUMN_CHECK, checkbox_width)
+         self.table.setColumnWidth(self.COLUMN_CHECK, checkbox_width)
+ 
+-        available_width = viewport_width - checkbox_width
++        category_header_item = self.table.horizontalHeaderItem(self.COLUMN_CATEGORY)
++        category_label = category_header_item.text() if category_header_item else "Category"
++        category_text_width = self.table.fontMetrics().horizontalAdvance(category_label)
++        category_min = max(category_text_width + 16, 96)
++        category_width = header.sectionSize(self.COLUMN_CATEGORY)
++        if category_width <= 0:
++            category_width = category_min
++        else:
++            category_width = max(category_width, category_min)
++
++        header.resizeSection(self.COLUMN_CATEGORY, category_width)
++        self.table.setColumnWidth(self.COLUMN_CATEGORY, category_width)
++
++        available_width = viewport_width - (checkbox_width + category_width)
+         if available_width <= 0:
+             QTimer.singleShot(0, self._update_initial_column_widths)
+             return
+ 
+         command_min = 160
+         value_min = 120
+         description_min = 280
+         command_ratio = 0.25
+         value_ratio = 0.20
+ 
+         command_width = max(int(available_width * command_ratio), command_min)
+         value_width = max(int(available_width * value_ratio), value_min)
+ 
+         description_width = available_width - (command_width + value_width)
+         if description_width < description_min:
+             description_width = description_min
+ 
+         total_width = command_width + value_width + description_width
+         if total_width > available_width:
+             overflow = total_width - available_width
+             preferred_description_min = max(description_min, command_width, value_width)
+             reducible_description = max(description_width - preferred_description_min, 0)
+             reduce = min(reducible_description, overflow)
+             description_width -= reduce
+             overflow -= reduce
