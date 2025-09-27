@@ -1,6 +1,6 @@
 # ============================
 # AllanBell3D Tasmota Bulk Tool (Cross-Platform GUI)
-# Version 0.1.2b
+# Version 0.1.2d
 # ============================
 
 import sys, os, json, asyncio, re, time
@@ -22,7 +22,7 @@ import pandas as pd
 # ============================
 # Defaults / constants
 # ============================
-APP_VERSION      = "0.1.2c"
+APP_VERSION      = "0.1.2d"
 APP_TITLE        = f"AllanBell3D Tasmota Bulk Tool (Cross-Platform GUI) {APP_VERSION}"
 DEFAULT_THREADS  = 100
 DEFAULT_TIMEOUT  = 1
@@ -704,6 +704,15 @@ class CommandLibraryDialog(QDialog):
             QAbstractItemView.DoubleClicked | QAbstractItemView.SelectedClicked | QAbstractItemView.EditKeyPressed
         )
         self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.table.setHorizontalScrollMode(QAbstractItemView.ScrollPerPixel)
+        size_adjust_policy_type = type(self.table.sizeAdjustPolicy())
+        adjust_ignored = getattr(size_adjust_policy_type, "AdjustIgnored", None)
+        if adjust_ignored is None:
+            abstract_scroll_area = globals().get("QAbstractScrollArea")
+            if abstract_scroll_area is not None:
+                adjust_ignored = getattr(abstract_scroll_area, "AdjustIgnored", None)
+        if adjust_ignored is not None:
+            self.table.setSizeAdjustPolicy(adjust_ignored)
 
         for row, record in enumerate(self.commands):
             command = record.get("name", "") if isinstance(record, dict) else ""
@@ -761,8 +770,6 @@ class CommandLibraryDialog(QDialog):
         header.resizeSection(self.COLUMN_CHECK, checkbox_width)
         self.table.setColumnWidth(self.COLUMN_CHECK, checkbox_width)
 
-        self.table.resizeColumnToContents(self.COLUMN_COMMAND)
-        self.table.resizeColumnToContents(self.COLUMN_VALUE)
         self.table.setSortingEnabled(True)
         layout.addWidget(self.table)
 
@@ -796,7 +803,12 @@ class CommandLibraryDialog(QDialog):
         if not self.table:
             return
 
-        viewport_width = self.table.viewport().width()
+        viewport = self.table.viewport()
+        if viewport is None:
+            QTimer.singleShot(0, self._update_initial_column_widths)
+            return
+
+        viewport_width = viewport.width()
         if viewport_width <= 0:
             QTimer.singleShot(0, self._update_initial_column_widths)
             return
@@ -806,105 +818,101 @@ class CommandLibraryDialog(QDialog):
             viewport_width -= vertical_scrollbar.width()
 
         header = self.table.horizontalHeader()
-        header_text_item = self.table.horizontalHeaderItem(self.COLUMN_CHECK)
-        text_width = self.table.fontMetrics().horizontalAdvance(
-            header_text_item.text() if header_text_item else "Select"
-        )
-        check_width = max(header.sectionSize(self.COLUMN_CHECK), text_width + 16, 68)
-        header.resizeSection(self.COLUMN_CHECK, check_width)
-        self.table.setColumnWidth(self.COLUMN_CHECK, check_width)
-
-        available_width = max(viewport_width - check_width, 0)
-        if available_width <= 0:
+        if header is None:
+            QTimer.singleShot(0, self._update_initial_column_widths)
             return
 
-        command_min = 140
-        command_fallback_min = 100
-        value_min = 110
-        value_fallback_min = 80
-        description_margin = 24
+        checkbox_width = max(header.sectionSize(self.COLUMN_CHECK), 68)
+        header.resizeSection(self.COLUMN_CHECK, checkbox_width)
+        self.table.setColumnWidth(self.COLUMN_CHECK, checkbox_width)
 
-        base_command = int(available_width * 0.30)
-        base_value = int(available_width * 0.20)
+        available_width = viewport_width - checkbox_width
+        if available_width <= 0:
+            QTimer.singleShot(0, self._update_initial_column_widths)
+            return
 
-        command_width = max(base_command, command_min)
-        value_width = max(base_value, value_min)
+        command_min = 160
+        value_min = 120
+        description_min = 280
+        command_ratio = 0.25
+        value_ratio = 0.20
 
-        total = command_width + value_width
-        if total >= available_width:
-            overflow = total - available_width + description_margin
-            reducible_command = max(command_width - command_min, 0)
-            reduce_command = min(reducible_command, overflow // 2)
-            command_width -= reduce_command
-            overflow -= reduce_command
-            reducible_value = max(value_width - value_min, 0)
-            reduce_value = min(reducible_value, overflow)
-            value_width -= reduce_value
-            overflow -= reduce_value
+        command_width = max(int(available_width * command_ratio), command_min)
+        value_width = max(int(available_width * value_ratio), value_min)
 
-        description_width = max(available_width - (command_width + value_width), 0)
+        description_width = available_width - (command_width + value_width)
+        if description_width < description_min:
+            description_width = description_min
 
-        expected_description = max(260, command_width + description_margin, value_width + description_margin)
-        if available_width >= command_min + value_min + 260 and description_width < expected_description:
-            deficit = expected_description - description_width
-            reducible_command = max(command_width - command_min, 0)
-            reduce_command = min(reducible_command, deficit // 2)
-            command_width -= reduce_command
-            deficit -= reduce_command
-            reducible_value = max(value_width - value_min, 0)
-            reduce_value = min(reducible_value, deficit)
-            value_width -= reduce_value
-            deficit -= reduce_value
-            description_width = max(available_width - (command_width + value_width), 0)
-            expected_description = max(260, command_width + description_margin, value_width + description_margin)
+        total_width = command_width + value_width + description_width
+        if total_width > available_width:
+            overflow = total_width - available_width
+            preferred_description_min = max(description_min, command_width, value_width)
+            reducible_description = max(description_width - preferred_description_min, 0)
+            reduce = min(reducible_description, overflow)
+            description_width -= reduce
+            overflow -= reduce
+
+            if overflow > 0:
+                reducible_command = max(command_width - command_min, 0)
+                reduce = min(reducible_command, overflow)
+                command_width -= reduce
+                overflow -= reduce
+
+            if overflow > 0:
+                reducible_value = max(value_width - value_min, 0)
+                reduce = min(reducible_value, overflow)
+                value_width -= reduce
+                overflow -= reduce
+
+            if overflow > 0:
+                description_width = max(description_width - overflow, 0)
+                overflow = 0
+        elif total_width < available_width:
+            description_width += available_width - total_width
 
         largest_other = max(command_width, value_width)
-        if description_width <= largest_other:
-            deficit = largest_other - description_width + description_margin
+        desired_description = max(description_min, largest_other + 24)
+        if description_width < desired_description:
+            deficit = desired_description - description_width
+            reductions = 0
             reducible_command = max(command_width - command_min, 0)
-            reduce_command = min(reducible_command, deficit // 2)
-            command_width -= reduce_command
-            deficit -= reduce_command
-            reducible_value = max(value_width - value_min, 0)
-            reduce_value = min(reducible_value, deficit)
-            value_width -= reduce_value
-            deficit -= reduce_value
-            description_width = max(available_width - (command_width + value_width), 0)
-            if (
-                description_width <= max(command_width, value_width)
-                and (
-                    command_width > command_fallback_min
-                    or value_width > value_fallback_min
-                )
-            ):
-                deficit = max(command_width, value_width) - description_width + description_margin
-                reducible_command = max(command_width - command_fallback_min, 0)
-                reduce_command = min(reducible_command, deficit // 2)
-                command_width -= reduce_command
-                deficit -= reduce_command
-                reducible_value = max(value_width - value_fallback_min, 0)
-                reduce_value = min(reducible_value, deficit)
-                value_width -= reduce_value
-                deficit -= reduce_value
-                description_width = max(available_width - (command_width + value_width), 0)
+            if reductions < deficit and reducible_command > 0:
+                take = min(reducible_command, deficit - reductions)
+                command_width -= take
+                reductions += take
+            if reductions < deficit:
+                reducible_value = max(value_width - value_min, 0)
+                if reducible_value > 0:
+                    take = min(reducible_value, deficit - reductions)
+                    value_width -= take
+                    reductions += take
+            description_width += reductions
 
-        if command_width + value_width > available_width:
-            scale = available_width / (command_width + value_width) if (command_width + value_width) else 1.0
-            command_width = int(command_width * scale)
-            value_width = available_width - command_width
+        command_width = max(command_width, 0)
+        value_width = max(value_width, 0)
+        description_width = max(description_width, 0)
 
-        description_width = max(available_width - (command_width + value_width), 0)
-
-        if description_width <= command_width:
-            target = max(description_width - description_margin, command_fallback_min)
-            if target < command_width:
-                command_width = target
-        if description_width <= value_width:
-            target = max(description_width - description_margin, value_fallback_min)
-            if target < value_width:
-                value_width = target
-
-        description_width = max(available_width - (command_width + value_width), 0)
+        total_width = command_width + value_width + description_width
+        if total_width > available_width:
+            overflow = total_width - available_width
+            min_description_allowed = max(description_min, command_width, value_width)
+            reducible_description = max(description_width - min_description_allowed, 0)
+            reduce = min(reducible_description, overflow)
+            description_width -= reduce
+            overflow -= reduce
+            if overflow > 0:
+                reducible_command = max(command_width - command_min, 0)
+                reduce = min(reducible_command, overflow)
+                command_width -= reduce
+                overflow -= reduce
+            if overflow > 0:
+                reducible_value = max(value_width - value_min, 0)
+                reduce = min(reducible_value, overflow)
+                value_width -= reduce
+                overflow -= reduce
+            if overflow > 0:
+                description_width = max(description_width - overflow, 0)
 
         header.resizeSection(self.COLUMN_COMMAND, command_width)
         self.table.setColumnWidth(self.COLUMN_COMMAND, command_width)

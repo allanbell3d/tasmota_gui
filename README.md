@@ -97,3 +97,4 @@ For detailed documentation, see [AGENTS.md](AGENTS.md).
 - 2025-09-27 0.1.2a: Added Command Library Button
 - 2025-09-27 0.1.2b: Added Preliminary Command Library
 - 2025-09-27 0.1.2c: Linked Command Library To JSON database. Added selection fields, filtering by command name and description. 
+- 2025-09-27 0.1.2d: Improved Commands Library window layout and added horizonal scroll bar.
