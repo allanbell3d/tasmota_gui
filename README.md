@@ -99,3 +99,4 @@ For detailed documentation, see [AGENTS.md](AGENTS.md).
 - 2025-09-27 0.1.2c: Linked Command Library To JSON database. Added selection fields, filtering by command name and description. 
 - 2025-09-27 0.1.2d: Improved Commands Library window layout and added horizonal scroll bar.
 - 2025-09-27 v.0.1.2e: Added "Category" column to Command Library in order to facilitate filtering and loaded values from JSON command database.
+- 2025-09-27 v0.1.2e: Added "Category" column to Command Library in order to facilitate filtering and loaded values from JSON command database.

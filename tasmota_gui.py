@@ -1,6 +1,6 @@
 # ============================
 # AllanBell3D Tasmota Bulk Tool (Cross-Platform GUI)
-# Version 0.1.2e
+# Version v0.1.2e
 # ============================
 
 import sys, os, json, asyncio, re, time
@@ -22,7 +22,7 @@ import pandas as pd
 # ============================
 # Defaults / constants
 # ============================
-APP_VERSION      = "0.1.2d"
+APP_VERSION      = "v0.1.2e"
 APP_TITLE        = f"AllanBell3D Tasmota Bulk Tool (Cross-Platform GUI) {APP_VERSION}"
 DEFAULT_THREADS  = 100
 DEFAULT_TIMEOUT  = 1
