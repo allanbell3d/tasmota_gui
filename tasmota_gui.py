@@ -1,12 +1,12 @@
 # ============================
 # AllanBell3D Tasmota Bulk Tool (Cross-Platform GUI)
-# Version 0.1.1a
+# Version 0.1.2a
 # ============================
 
 import sys, os, json, asyncio, re, time
 from dataclasses import dataclass
 
-from PySide6.QtCore import Qt, QThread, Signal, QObject
+from PySide6.QtCore import Qt, QThread, Signal, QObject, QEvent
 from PySide6.QtGui import QColor, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
@@ -21,7 +21,7 @@ import pandas as pd
 # ============================
 # Defaults / constants
 # ============================
-APP_VERSION      = "0.1.1a"
+APP_VERSION      = "0.1.2a"
 APP_TITLE        = f"AllanBell3D Tasmota Bulk Tool (Cross-Platform GUI) {APP_VERSION}"
 DEFAULT_THREADS  = 100
 DEFAULT_TIMEOUT  = 1
@@ -617,8 +617,20 @@ class MainWindow(QWidget):
 
         v.addWidget(QLabel("IP ranges:")); self.txt_ranges = QTextEdit()
         self.txt_ranges.setPlainText(DEFAULT_IP_RANGES); v.addWidget(self.txt_ranges)
-        v.addWidget(QLabel("Commands:")); self.txt_cmds = QTextEdit()
+        cmd_header = QHBoxLayout()
+        cmd_header.addWidget(QLabel("Commands:"))
+        cmd_header.addStretch(1)
+        self.btn_cmd_library = QPushButton("Command Library…")
+        self.btn_cmd_library.clicked.connect(self.open_command_library)
+        cmd_header.addWidget(self.btn_cmd_library)
+        v.addLayout(cmd_header)
+
+        self.txt_cmds = QTextEdit()
         self.txt_cmds.setPlainText("\n".join(DEFAULT_COMMANDS)); v.addWidget(self.txt_cmds)
+        self.txt_cmds.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.txt_cmds.customContextMenuRequested.connect(self.show_cmd_context_menu)
+        self.txt_cmds.installEventFilter(self)
+        self.btn_cmd_library.setEnabled(self.txt_cmds.isEnabled())
 
         bh = QHBoxLayout()
         self.btn_start = QPushButton("Start Scan"); self.btn_start.clicked.connect(self.on_start)
@@ -712,6 +724,23 @@ class MainWindow(QWidget):
             QMessageBox.information(self, "Log Saved", f"Saved log to:\n{path}")
         except Exception as e:
             QMessageBox.critical(self, "Save Error", str(e))
+
+    def show_cmd_context_menu(self, pos):
+        menu = self.txt_cmds.createStandardContextMenu()
+        if menu is None:
+            return
+        menu.addSeparator()
+        action = menu.addAction("Command Library…")
+        action.triggered.connect(self.open_command_library)
+        menu.exec(self.txt_cmds.mapToGlobal(pos))
+
+    def open_command_library(self):
+        QMessageBox.information(self, "Command Library", "Command library interface coming soon.")
+
+    def eventFilter(self, source, event):
+        if source is self.txt_cmds and event.type() == QEvent.EnabledChange:
+            self.btn_cmd_library.setEnabled(self.txt_cmds.isEnabled())
+        return super().eventFilter(source, event)
 
     # ----- Core actions -----
     def on_pick_folder(self):

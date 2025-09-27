@@ -1,4 +1,4 @@
-# Tasmota Bulk Tool (Cross-Platform GUI)
+﻿# Tasmota Bulk Tool (Cross-Platform GUI)
 
 Cross-platform **PySide6 GUI tool** to manage Tasmota devices in bulk on LAN.
 
@@ -29,7 +29,7 @@ python tasmota_gui.py
 
 ## Agents Overview (Detailed)
 
-This project — **AllanBell3D Tasmota Bulk Tool (Cross-Platform GUI)** — manages bulk operations on Tasmota devices.  
+This project â€” **AllanBell3D Tasmota Bulk Tool (Cross-Platform GUI)** â€” manages bulk operations on Tasmota devices.  
 It uses a modular architecture where each **agent** has a clear role.
 
 ### GUI Agent
@@ -61,7 +61,7 @@ Stores reusable Tasmota commands. Provides filtering and selection in the GUI.
 
 ## Agents Overview (Summary)
 
-This project — **AllanBell3D Tasmota Bulk Tool (Cross-Platform GUI)** — manages bulk operations on Tasmota devices.  
+This project â€” **AllanBell3D Tasmota Bulk Tool (Cross-Platform GUI)** â€” manages bulk operations on Tasmota devices.  
 It uses a modular architecture where each **agent** has a clear role.
 
 ### Agents
@@ -94,3 +94,4 @@ It uses a modular architecture where each **agent** has a clear role.
 For detailed documentation, see [AGENTS.md](AGENTS.md).
 
 
+- 2025-09-27 0.1.2a: Added Command Library Button
