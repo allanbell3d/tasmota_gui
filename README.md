@@ -22,8 +22,20 @@ Cross-platform **PySide6 GUI tool** to manage Tasmota devices in bulk on LAN.
 
 ## Usage
 ```bash
+python desktop/main.py
+# or use the compatibility launcher
 python tasmota_gui.py
 ```
+
+---
+
+## Repository Layout
+
+- `core/` – Shared networking, OTA, parsing, and utility helpers.
+- `desktop/` – PySide6 desktop GUI that imports logic from `core/`.
+- `android/` – Placeholder for the upcoming Kivy-based Android UI.
+- `releases/` – Release artifacts and archives.
+- `tasmota_commands.json` – Shared command library consumed by the GUIs.
 
 ---
 
