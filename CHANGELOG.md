@@ -8,6 +8,12 @@ This project follows **semantic versioning**:
 
 ---
 
+## [v0.1.2f] - 2025-09-27
+### Added
+- Dedicated **Category** Filter field in Command Library GUI.
+  
+---
+
 ## [v0.1.2e] - 2025-09-27
 ### Added
 - Dedicated **Category** column to the command library dialog
