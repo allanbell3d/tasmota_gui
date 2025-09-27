@@ -1,6 +1,6 @@
 # ============================
 # AllanBell3D Tasmota Bulk Tool (Cross-Platform GUI)
-# Version v0.1.2e
+# Version v0.1.2.f
 # ============================
 
 import sys, os, json, asyncio, re, time
@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
     QGroupBox, QPushButton, QTextEdit, QSpinBox, QFileDialog,
     QProgressBar, QMessageBox, QDialog, QTableWidget,
     QTableWidgetItem, QCheckBox, QHeaderView, QLineEdit, QSizePolicy,
-    QAbstractItemView, QStyleOptionButton, QStyle
+    QAbstractItemView, QStyleOptionButton, QStyle, QComboBox
 )
 
 import httpx
@@ -22,7 +22,7 @@ import pandas as pd
 # ============================
 # Defaults / constants
 # ============================
-APP_VERSION      = "v0.1.2e"
+APP_VERSION      = "v0.1.2.f"
 APP_TITLE        = f"AllanBell3D Tasmota Bulk Tool (Cross-Platform GUI) {APP_VERSION}"
 DEFAULT_THREADS  = 100
 DEFAULT_TIMEOUT  = 1
@@ -718,6 +718,11 @@ class CommandLibraryDialog(QDialog):
         self.description_filter_edit.setPlaceholderText("Filter description…")
         filter_row.addWidget(self.description_filter_edit)
 
+        self.category_filter_combo = QComboBox()
+        self.category_filter_combo.setEditable(False)
+        self._populate_category_filter()
+        filter_row.addWidget(self.category_filter_combo)
+
         layout.addLayout(filter_row)
 
         self.table = QTableWidget(len(self.commands), 5)
@@ -827,8 +832,38 @@ class CommandLibraryDialog(QDialog):
 
         self.command_filter_edit.textChanged.connect(lambda _: self.apply_filter())
         self.description_filter_edit.textChanged.connect(lambda _: self.apply_filter())
+        self.category_filter_combo.currentIndexChanged.connect(lambda _: self.apply_filter())
         self.table.itemDoubleClicked.connect(self.on_item_double_clicked)
         self.apply_filter()
+
+    def _populate_category_filter(self):
+        if not hasattr(self, "category_filter_combo") or self.category_filter_combo is None:
+            return
+
+        all_categories = []
+        seen = set()
+        has_empty = False
+        for record in self.commands:
+            if not isinstance(record, dict):
+                continue
+            category = str(record.get("category", "") or "").strip()
+            if not category:
+                has_empty = True
+                continue
+            key = category.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            all_categories.append(category)
+
+        all_categories.sort(key=lambda value: value.lower())
+
+        self.category_filter_combo.clear()
+        self.category_filter_combo.addItem("All categories", None)
+        if has_empty:
+            self.category_filter_combo.addItem("Uncategorized", "")
+        for category in all_categories:
+            self.category_filter_combo.addItem(category, category)
 
     def _checkbox_at_row(self, row):
         widget = self.table.cellWidget(row, self.COLUMN_CHECK)
@@ -979,14 +1014,20 @@ class CommandLibraryDialog(QDialog):
                          if self.command_filter_edit else "")
         description_query = (self.description_filter_edit.text().strip().lower()
                               if self.description_filter_edit else "")
+        category_filter = None
+        if hasattr(self, "category_filter_combo") and self.category_filter_combo is not None:
+            category_filter = self.category_filter_combo.currentData()
+
         for row in range(self.table.rowCount()):
             command_item = self.table.item(row, self.COLUMN_COMMAND)
             value_item = self.table.item(row, self.COLUMN_VALUE)
             description_item = self.table.item(row, self.COLUMN_DESCRIPTION)
+            category_item = self.table.item(row, self.COLUMN_CATEGORY)
 
             command_text = command_item.text().lower() if command_item else ""
             value_text = value_item.text().lower() if value_item else ""
             description_text = description_item.text().lower() if description_item else ""
+            category_text = category_item.text().strip() if category_item else ""
 
             command_match = True
             if command_query:
@@ -996,7 +1037,14 @@ class CommandLibraryDialog(QDialog):
             if description_query:
                 description_match = description_query in description_text
 
-            self.table.setRowHidden(row, not (command_match and description_match))
+            category_match = True
+            if category_filter is not None:
+                if category_filter == "":
+                    category_match = category_text == ""
+                else:
+                    category_match = category_text.lower() == str(category_filter).lower()
+
+            self.table.setRowHidden(row, not (command_match and description_match and category_match))
 
     def on_item_double_clicked(self, item):
         if item is None:
