@@ -8,7 +8,7 @@ This project follows **semantic versioning**:
 
 ---
 
-## [v0.1.1a] - 2025-09-26
+## [v0.1.1a] - 2025-09-27
 ### Added
 - Initial GitHub commit
 - Base GUI using PySide6

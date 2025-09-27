@@ -93,4 +93,4 @@ It uses a modular architecture where each **agent** has a clear role.
 
 For detailed documentation, see [AGENTS.md](AGENTS.md).
 
-- 2025-09-27 0.1.2a: Added Commands selection Button
+
