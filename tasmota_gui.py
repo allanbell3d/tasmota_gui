@@ -1,19 +1,19 @@
 # ============================
 # AllanBell3D Tasmota Bulk Tool (Cross-Platform GUI)
-# Version 0.1.2b
+# Version 0.1.2d
 # ============================
 
 import sys, os, json, asyncio, re, time
 from dataclasses import dataclass
 
-from PySide6.QtCore import Qt, QThread, Signal, QObject, QEvent
+from PySide6.QtCore import Qt, QThread, Signal, QObject, QEvent, QTimer
 from PySide6.QtGui import QColor, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QGroupBox, QPushButton, QTextEdit, QSpinBox, QFileDialog,
     QProgressBar, QMessageBox, QDialog, QTableWidget,
     QTableWidgetItem, QCheckBox, QHeaderView, QLineEdit, QSizePolicy,
-    QAbstractItemView
+    QAbstractItemView, QStyleOptionButton, QStyle
 )
 
 import httpx
@@ -22,7 +22,7 @@ import pandas as pd
 # ============================
 # Defaults / constants
 # ============================
-APP_VERSION      = "0.1.2b"
+APP_VERSION      = "0.1.2d"
 APP_TITLE        = f"AllanBell3D Tasmota Bulk Tool (Cross-Platform GUI) {APP_VERSION}"
 DEFAULT_THREADS  = 100
 DEFAULT_TIMEOUT  = 1
@@ -68,6 +68,8 @@ OTA_URLS = {
     "ESP8266": "http://ota.tasmota.com/tasmota/release/tasmota.bin.gz"
 }
 
+_command_library_last_error = None
+
 # ============================
 # Helpers
 # ============================
@@ -105,6 +107,78 @@ def safe_extract_json(text: str):
         except Exception:
             return None
     return None
+
+
+def _show_command_library_error(parent, message):
+    global _command_library_last_error
+    if _command_library_last_error == message:
+        return
+    _command_library_last_error = message
+    box_parent = parent if parent is not None else QApplication.activeWindow()
+    QMessageBox.critical(box_parent, "Command Library Error", message)
+
+
+def load_command_library_from_json(parent=None):
+    global _command_library_last_error
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    path = os.path.join(base_dir, "tasmota_commands.json")
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except FileNotFoundError:
+        _show_command_library_error(parent, f"Command library file not found:\n{path}")
+        return []
+    except Exception as exc:
+        _show_command_library_error(parent, f"Failed to load command library:\n{exc}")
+        return []
+
+    if not isinstance(data, list):
+        _show_command_library_error(parent, "Command library JSON must contain a list of entries.")
+        return []
+
+    records = []
+    for entry in data:
+        record = {}
+        if isinstance(entry, dict):
+            command_name = entry.get("command") or entry.get("name") or entry.get("cmd") or entry.get("keyword")
+            default_value = entry.get("value")
+            if default_value is None:
+                default_value = entry.get("default")
+            description = entry.get("description") or entry.get("desc") or entry.get("details")
+            record["metadata"] = dict(entry)
+        elif isinstance(entry, (list, tuple)):
+            command_name = entry[0] if entry else ""
+            default_value = entry[1] if len(entry) > 1 else ""
+            description = entry[2] if len(entry) > 2 else ""
+            record["metadata"] = {"raw": list(entry)}
+        else:
+            continue
+
+        command_name = str(command_name or "").strip()
+        if not command_name:
+            continue
+
+        if isinstance(default_value, (dict, list)):
+            try:
+                default_value = json.dumps(default_value)
+            except Exception:
+                default_value = str(default_value)
+        elif default_value is None:
+            default_value = ""
+        else:
+            default_value = str(default_value)
+
+        description = "" if description is None else str(description)
+
+        record.update({
+            "name": command_name,
+            "value": default_value,
+            "description": description,
+        })
+        records.append(record)
+
+    _command_library_last_error = None
+    return records
 
 # ============================
 # Data
@@ -585,31 +659,121 @@ class SelectionWindow(QDialog):
 # GUI
 # ============================
 class CommandLibraryDialog(QDialog):
+    COLUMN_CHECK = 0
+    COLUMN_COMMAND = 1
+    COLUMN_VALUE = 2
+    COLUMN_DESCRIPTION = 3
+
     def __init__(self, parent=None, commands=None):
         super().__init__(parent)
         self.setWindowTitle("Command Library")
-        self.resize(600, 400)
+        self.resize(720, 420)
+        self.setSizeGripEnabled(True)
+        self.setWindowFlags(
+            self.windowFlags() | Qt.WindowMinimizeButtonHint | Qt.WindowMaximizeButtonHint
+        )
         self.selected_commands = []
-        self.commands = list(commands or COMMAND_LIBRARY)
+        self.commands = list(commands or [])
 
         layout = QVBoxLayout(self)
 
-        self.filter_edit = QLineEdit()
-        self.filter_edit.setPlaceholderText("Filter commands…")
-        layout.addWidget(self.filter_edit)
+        filter_row = QHBoxLayout()
+        self.command_filter_edit = QLineEdit()
+        self.command_filter_edit.setPlaceholderText("Filter command…")
+        filter_row.addWidget(self.command_filter_edit)
 
-        self.table = QTableWidget(len(self.commands), 2)
-        self.table.setHorizontalHeaderLabels(["Command", "Description"])
-        self.table.horizontalHeader().setStretchLastSection(True)
+        self.description_filter_edit = QLineEdit()
+        self.description_filter_edit.setPlaceholderText("Filter description…")
+        filter_row.addWidget(self.description_filter_edit)
+
+        layout.addLayout(filter_row)
+
+        self.table = QTableWidget(len(self.commands), 4)
+        self.table.setHorizontalHeaderLabels(["Select", "Command", "Value", "Description"])
+        header = self.table.horizontalHeader()
+        header.setStretchLastSection(False)
+        header.setSectionResizeMode(self.COLUMN_CHECK, QHeaderView.Fixed)
+        header.setSectionResizeMode(self.COLUMN_COMMAND, QHeaderView.Interactive)
+        header.setSectionResizeMode(self.COLUMN_VALUE, QHeaderView.Interactive)
+        header.setSectionResizeMode(self.COLUMN_DESCRIPTION, QHeaderView.Interactive)
         self.table.verticalHeader().setVisible(False)
-        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.table.setSelectionMode(QAbstractItemView.MultiSelection)
-        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.setAlternatingRowColors(True)
-        for row, (command, description) in enumerate(self.commands):
-            self.table.setItem(row, 0, QTableWidgetItem(command))
-            self.table.setItem(row, 1, QTableWidgetItem(description))
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.table.setEditTriggers(
+            QAbstractItemView.DoubleClicked | QAbstractItemView.SelectedClicked | QAbstractItemView.EditKeyPressed
+        )
+        self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.table.setHorizontalScrollMode(QAbstractItemView.ScrollPerPixel)
+        size_adjust_policy_type = type(self.table.sizeAdjustPolicy())
+        adjust_ignored = getattr(size_adjust_policy_type, "AdjustIgnored", None)
+        if adjust_ignored is None:
+            abstract_scroll_area = globals().get("QAbstractScrollArea")
+            if abstract_scroll_area is not None:
+                adjust_ignored = getattr(abstract_scroll_area, "AdjustIgnored", None)
+        if adjust_ignored is not None:
+            self.table.setSizeAdjustPolicy(adjust_ignored)
+
+        for row, record in enumerate(self.commands):
+            command = record.get("name", "") if isinstance(record, dict) else ""
+            value = record.get("value", "") if isinstance(record, dict) else ""
+            description = record.get("description", "") if isinstance(record, dict) else ""
+
+            check_item = QTableWidgetItem()
+            check_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+            check_item.setData(Qt.UserRole, command)
+            self.table.setItem(row, self.COLUMN_CHECK, check_item)
+
+            checkbox = QCheckBox()
+            checkbox.setTristate(False)
+            checkbox.setChecked(False)
+            checkbox.setFocusPolicy(Qt.NoFocus)
+            checkbox_container = QWidget()
+            checkbox_container.setProperty("_checkbox_widget", checkbox)
+            checkbox_layout = QHBoxLayout(checkbox_container)
+            checkbox_layout.setContentsMargins(0, 0, 0, 0)
+            checkbox_layout.setAlignment(Qt.AlignCenter)
+            checkbox_layout.addWidget(checkbox)
+            self.table.setCellWidget(row, self.COLUMN_CHECK, checkbox_container)
+
+            command_item = QTableWidgetItem(command)
+            command_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+            command_item.setToolTip(command)
+            self.table.setItem(row, self.COLUMN_COMMAND, command_item)
+
+            value_item = QTableWidgetItem(value)
+            value_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsEditable)
+            value_item.setToolTip(value)
+            self.table.setItem(row, self.COLUMN_VALUE, value_item)
+
+            description_item = QTableWidgetItem(description)
+            description_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+            description_item.setToolTip(description)
+            self.table.setItem(row, self.COLUMN_DESCRIPTION, description_item)
+
+        header_text_item = self.table.horizontalHeaderItem(self.COLUMN_CHECK)
+        text_width = self.table.fontMetrics().horizontalAdvance(
+            header_text_item.text() if header_text_item else "Select"
+        )
+        option = QStyleOptionButton()
+        style = self.table.style()
+        indicator_width = max(style.pixelMetric(QStyle.PM_IndicatorWidth, option), 0)
+        spacing = max(style.pixelMetric(QStyle.PM_CheckBoxLabelSpacing, option), 0)
+        frame = max(style.pixelMetric(QStyle.PM_DefaultFrameWidth, option), 0)
+        components = [indicator_width, spacing, frame * 2, text_width]
+        checkbox_width = sum(value for value in components if value > 0)
+        minimum_checkbox_width = max(indicator_width + text_width, 68)
+        if checkbox_width <= 0:
+            checkbox_width = max(minimum_checkbox_width, 48)
+        else:
+            checkbox_width = max(checkbox_width, minimum_checkbox_width)
+        header.resizeSection(self.COLUMN_CHECK, checkbox_width)
+        self.table.setColumnWidth(self.COLUMN_CHECK, checkbox_width)
+
+        self.table.setSortingEnabled(True)
         layout.addWidget(self.table)
+
+        QTimer.singleShot(0, self._update_initial_column_widths)
 
         btn_row = QHBoxLayout()
         btn_row.addStretch(1)
@@ -621,35 +785,201 @@ class CommandLibraryDialog(QDialog):
         btn_row.addWidget(self.btn_cancel)
         layout.addLayout(btn_row)
 
-        self.filter_edit.textChanged.connect(self.apply_filter)
+        self.command_filter_edit.textChanged.connect(lambda _: self.apply_filter())
+        self.description_filter_edit.textChanged.connect(lambda _: self.apply_filter())
         self.table.itemDoubleClicked.connect(self.on_item_double_clicked)
+        self.apply_filter()
 
-    def apply_filter(self, text):
-        query = (text or "").strip().lower()
+    def _checkbox_at_row(self, row):
+        widget = self.table.cellWidget(row, self.COLUMN_CHECK)
+        if widget is None:
+            return None
+        checkbox = widget.property("_checkbox_widget")
+        if isinstance(checkbox, QCheckBox):
+            return checkbox
+        return widget.findChild(QCheckBox)
+
+    def _update_initial_column_widths(self):
+        if not self.table:
+            return
+
+        viewport = self.table.viewport()
+        if viewport is None:
+            QTimer.singleShot(0, self._update_initial_column_widths)
+            return
+
+        viewport_width = viewport.width()
+        if viewport_width <= 0:
+            QTimer.singleShot(0, self._update_initial_column_widths)
+            return
+
+        vertical_scrollbar = self.table.verticalScrollBar()
+        if vertical_scrollbar and vertical_scrollbar.isVisible():
+            viewport_width -= vertical_scrollbar.width()
+
+        header = self.table.horizontalHeader()
+        if header is None:
+            QTimer.singleShot(0, self._update_initial_column_widths)
+            return
+
+        checkbox_width = max(header.sectionSize(self.COLUMN_CHECK), 68)
+        header.resizeSection(self.COLUMN_CHECK, checkbox_width)
+        self.table.setColumnWidth(self.COLUMN_CHECK, checkbox_width)
+
+        available_width = viewport_width - checkbox_width
+        if available_width <= 0:
+            QTimer.singleShot(0, self._update_initial_column_widths)
+            return
+
+        command_min = 160
+        value_min = 120
+        description_min = 280
+        command_ratio = 0.25
+        value_ratio = 0.20
+
+        command_width = max(int(available_width * command_ratio), command_min)
+        value_width = max(int(available_width * value_ratio), value_min)
+
+        description_width = available_width - (command_width + value_width)
+        if description_width < description_min:
+            description_width = description_min
+
+        total_width = command_width + value_width + description_width
+        if total_width > available_width:
+            overflow = total_width - available_width
+            preferred_description_min = max(description_min, command_width, value_width)
+            reducible_description = max(description_width - preferred_description_min, 0)
+            reduce = min(reducible_description, overflow)
+            description_width -= reduce
+            overflow -= reduce
+
+            if overflow > 0:
+                reducible_command = max(command_width - command_min, 0)
+                reduce = min(reducible_command, overflow)
+                command_width -= reduce
+                overflow -= reduce
+
+            if overflow > 0:
+                reducible_value = max(value_width - value_min, 0)
+                reduce = min(reducible_value, overflow)
+                value_width -= reduce
+                overflow -= reduce
+
+            if overflow > 0:
+                description_width = max(description_width - overflow, 0)
+                overflow = 0
+        elif total_width < available_width:
+            description_width += available_width - total_width
+
+        largest_other = max(command_width, value_width)
+        desired_description = max(description_min, largest_other + 24)
+        if description_width < desired_description:
+            deficit = desired_description - description_width
+            reductions = 0
+            reducible_command = max(command_width - command_min, 0)
+            if reductions < deficit and reducible_command > 0:
+                take = min(reducible_command, deficit - reductions)
+                command_width -= take
+                reductions += take
+            if reductions < deficit:
+                reducible_value = max(value_width - value_min, 0)
+                if reducible_value > 0:
+                    take = min(reducible_value, deficit - reductions)
+                    value_width -= take
+                    reductions += take
+            description_width += reductions
+
+        command_width = max(command_width, 0)
+        value_width = max(value_width, 0)
+        description_width = max(description_width, 0)
+
+        total_width = command_width + value_width + description_width
+        if total_width > available_width:
+            overflow = total_width - available_width
+            min_description_allowed = max(description_min, command_width, value_width)
+            reducible_description = max(description_width - min_description_allowed, 0)
+            reduce = min(reducible_description, overflow)
+            description_width -= reduce
+            overflow -= reduce
+            if overflow > 0:
+                reducible_command = max(command_width - command_min, 0)
+                reduce = min(reducible_command, overflow)
+                command_width -= reduce
+                overflow -= reduce
+            if overflow > 0:
+                reducible_value = max(value_width - value_min, 0)
+                reduce = min(reducible_value, overflow)
+                value_width -= reduce
+                overflow -= reduce
+            if overflow > 0:
+                description_width = max(description_width - overflow, 0)
+
+        header.resizeSection(self.COLUMN_COMMAND, command_width)
+        self.table.setColumnWidth(self.COLUMN_COMMAND, command_width)
+        header.resizeSection(self.COLUMN_VALUE, value_width)
+        self.table.setColumnWidth(self.COLUMN_VALUE, value_width)
+        header.resizeSection(self.COLUMN_DESCRIPTION, description_width)
+        self.table.setColumnWidth(self.COLUMN_DESCRIPTION, description_width)
+
+    def apply_filter(self):
+        command_query = (self.command_filter_edit.text().strip().lower()
+                         if self.command_filter_edit else "")
+        description_query = (self.description_filter_edit.text().strip().lower()
+                              if self.description_filter_edit else "")
         for row in range(self.table.rowCount()):
-            if not query:
-                self.table.setRowHidden(row, False)
-                continue
-            command = self.table.item(row, 0).text().lower() if self.table.item(row, 0) else ""
-            description = self.table.item(row, 1).text().lower() if self.table.item(row, 1) else ""
-            match = query in command or query in description
-            self.table.setRowHidden(row, not match)
+            command_item = self.table.item(row, self.COLUMN_COMMAND)
+            value_item = self.table.item(row, self.COLUMN_VALUE)
+            description_item = self.table.item(row, self.COLUMN_DESCRIPTION)
 
-    def on_item_double_clicked(self, _item):
+            command_text = command_item.text().lower() if command_item else ""
+            value_text = value_item.text().lower() if value_item else ""
+            description_text = description_item.text().lower() if description_item else ""
+
+            command_match = True
+            if command_query:
+                command_match = (command_query in command_text) or (command_query in value_text)
+
+            description_match = True
+            if description_query:
+                description_match = description_query in description_text
+
+            self.table.setRowHidden(row, not (command_match and description_match))
+
+    def on_item_double_clicked(self, item):
+        if item is None:
+            return
+
+        if item.column() == self.COLUMN_VALUE:
+            return
+        if item.column() == self.COLUMN_CHECK:
+            checkbox = self._checkbox_at_row(item.row())
+            if checkbox:
+                checkbox.setChecked(not checkbox.isChecked())
+            return
         self.accept()
 
     def accept(self):
-        selection = self.table.selectionModel().selectedRows()
-        seen = set()
         self.selected_commands = []
-        for index in selection:
-            cmd_item = self.table.item(index.row(), 0)
-            if not cmd_item:
+        seen = set()
+        for row in range(self.table.rowCount()):
+            checkbox = self._checkbox_at_row(row)
+            if not checkbox or not checkbox.isChecked():
                 continue
-            command = cmd_item.text()
-            if command not in seen:
-                seen.add(command)
-                self.selected_commands.append(command)
+
+            command_item = self.table.item(row, self.COLUMN_COMMAND)
+            value_item = self.table.item(row, self.COLUMN_VALUE)
+
+            command_text = command_item.text().strip() if command_item else ""
+            value_text = value_item.text().strip() if value_item else ""
+
+            if not command_text or command_text in seen:
+                continue
+
+            seen.add(command_text)
+            full_command = f"{command_text} {value_text}".strip()
+            if full_command:
+                self.selected_commands.append(full_command)
+
         super().accept()
 
 
@@ -809,7 +1139,13 @@ class MainWindow(QWidget):
         menu.exec(self.txt_cmds.mapToGlobal(pos))
 
     def open_command_library(self):
-        dialog = CommandLibraryDialog(self, COMMAND_LIBRARY)
+        records = load_command_library_from_json(self)
+        if not records and _command_library_last_error:
+            return
+        if not records:
+            QMessageBox.information(self, "Command Library", "No commands available in tasmota_commands.json.")
+            return
+        dialog = CommandLibraryDialog(self, records)
         if dialog.exec() == QDialog.Accepted and dialog.selected_commands:
             current_text = self.txt_cmds.toPlainText()
             existing_lines = current_text.splitlines()
