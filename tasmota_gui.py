@@ -1,12 +1,14 @@
 # ============================
 # AllanBell3D Tasmota Bulk Tool (Cross-Platform GUI)
-# Version v0.1.2.f
+# Version v0.1.3
 # ============================
 
-import sys, os, json, asyncio, re, time
-from dataclasses import dataclass
+import asyncio
+import os
+import sys
+import time
 
-from PySide6.QtCore import Qt, QThread, Signal, QObject, QEvent, QTimer
+from PySide6.QtCore import Qt, QEvent, QObject, QThread, QTimer, Signal
 from PySide6.QtGui import QColor, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
@@ -16,99 +18,36 @@ from PySide6.QtWidgets import (
     QAbstractItemView, QStyleOptionButton, QStyle, QComboBox
 )
 
-import httpx
 import pandas as pd
+
+from tasmota_core.bulk import DeviceResult, TasmotaBulkExecutor
+from tasmota_core.commands import (
+    DEFAULT_COMMANDS,
+    CommandLibraryError,
+    CommandRecord,
+    load_command_library,
+)
+from tasmota_core.constants import (
+    APP_VERSION,
+    DEFAULT_BACKOFF,
+    DEFAULT_IP_RANGES,
+    DEFAULT_RETRIES,
+    DEFAULT_THREADS,
+    DEFAULT_TIMEOUT,
+    OTA_URLS,
+)
+from tasmota_core.utils import build_ip_list
 
 # ============================
 # Defaults / constants
 # ============================
-APP_VERSION      = "v0.1.2.f"
-APP_TITLE        = f"AllanBell3D Tasmota Bulk Tool (Cross-Platform GUI) {APP_VERSION}"
-DEFAULT_THREADS  = 100
-DEFAULT_TIMEOUT  = 1
-DEFAULT_RETRIES  = 1
-DEFAULT_BACKOFF  = 1.0
-DEFAULT_XLSX     = "tasmota_hardware_summary.xlsx"
-DEFAULT_CSV      = "tasmota_hardware_summary.csv"
-
-COMMAND_LIBRARY = [
-    ("mqtthost 192.168.64.5", "Set the MQTT broker hostname."),
-    ("mqttuser villa", "Set the MQTT username."),
-    ("mqttpassword villa", "Set the MQTT password."),
-    ("FullTopic %prefix%/%topic%/", "Configure the MQTT topic template."),
-    ("TelePeriod 10", "Publish telemetry every 10 seconds."),
-    ("latitude 25.163853", "Set device latitude."),
-    ("longitude 55.219098", "Set device longitude."),
-    ("timezone +4", "Set timezone offset."),
-    ("powerretain on", "Retain power state over MQTT."),
-    ("wattres 2", "Set watt resolution to 2 decimals."),
-    ("EnergyRes 2", "Set energy resolution to 2 decimals."),
-    ("AmpRes 2", "Set ampere resolution to 2 decimals."),
-    ("switchretain off", "Disable switch retain."),
-    ("buttonretain off", "Disable button retain."),
-    ("poweronstate 3", "Restore last power state after reboot."),
-    ("SetOption56 1", "Enable instantaneous energy updates."),
-    ("SetOption57 1", "Enable cumulative energy updates."),
-    ("SetOption59 1", "Set switch mode to follow relay state."),
-    ("SetOption65 1", "Enable device LED for Wi-Fi status."),
-    ("WifiConfig 5", "Enable Wi-Fi SmartConfig and WPS."),
-]
-
-DEFAULT_COMMANDS = [cmd for cmd, _ in COMMAND_LIBRARY]
-
-DEFAULT_IP_RANGES = """192.168.60.10-254
-192.168.62.10-254
-192.168.64.10-254
-192.168.66.10-254"""
-
-JSON_OBJECT_RE = re.compile(r"\{.*\}", re.DOTALL)
-
-OTA_URLS = {
-    "ESP32": "http://ota.tasmota.com/tasmota32/release/tasmota32.bin",
-    "ESP8266": "http://ota.tasmota.com/tasmota/release/tasmota.bin.gz"
-}
+APP_TITLE = f"AllanBell3D Tasmota Bulk Tool (Cross-Platform GUI) {APP_VERSION}"
 
 _command_library_last_error = None
 
 # ============================
 # Helpers
 # ============================
-def build_ip_list(ranges_text: str):
-    ips = []
-    for raw in ranges_text.splitlines():
-        line = raw.strip()
-        if not line:
-            continue
-        if "-" in line:
-            try:
-                prefix, tail = line.rsplit(".", 1)
-                a, b = tail.split("-", 1)
-                for i in range(int(a), int(b) + 1):
-                    ips.append(f"{prefix}.{i}")
-            except Exception:
-                pass
-        else:
-            ips.append(line)
-    return ips
-
-def safe_extract_json(text: str):
-    if not text:
-        return None
-    if "<html" in text.lower() and "{" not in text:
-        return None
-    try:
-        return json.loads(text)
-    except Exception:
-        pass
-    m = JSON_OBJECT_RE.search(text)
-    if m:
-        try:
-            return json.loads(m.group(0))
-        except Exception:
-            return None
-    return None
-
-
 def _show_command_library_error(parent, message):
     global _command_library_last_error
     if _command_library_last_error == message:
@@ -120,414 +59,60 @@ def _show_command_library_error(parent, message):
 
 def load_command_library_from_json(parent=None):
     global _command_library_last_error
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    path = os.path.join(base_dir, "tasmota_commands.json")
     try:
-        with open(path, "r", encoding="utf-8") as handle:
-            data = json.load(handle)
-    except FileNotFoundError:
-        _show_command_library_error(parent, f"Command library file not found:\n{path}")
+        records = load_command_library()
+    except CommandLibraryError as exc:
+        _show_command_library_error(parent, str(exc))
         return []
-    except Exception as exc:
-        _show_command_library_error(parent, f"Failed to load command library:\n{exc}")
-        return []
-
-    if not isinstance(data, list):
-        _show_command_library_error(parent, "Command library JSON must contain a list of entries.")
-        return []
-
-    records = []
-    for entry in data:
-        record = {}
-        raw_category = ""
-        if isinstance(entry, dict):
-            normalized = {}
-            for key, value in entry.items():
-                if isinstance(key, str):
-                    normalized.setdefault(key.lower(), value)
-
-            def _get(*candidates):
-                for key in candidates:
-                    if key in entry:
-                        return entry[key]
-                for key in candidates:
-                    lower_key = key.lower() if isinstance(key, str) else key
-                    if isinstance(lower_key, str) and lower_key in normalized:
-                        return normalized[lower_key]
-                return None
-
-            command_name = _get("command", "name", "cmd", "keyword")
-            default_value = _get("value")
-            if default_value is None:
-                default_value = _get("default")
-            description = _get("description", "desc", "details")
-            raw_category = _get("category", "section")
-            record["metadata"] = dict(entry)
-        elif isinstance(entry, (list, tuple)):
-            command_name = entry[0] if entry else ""
-            default_value = entry[1] if len(entry) > 1 else ""
-            description = entry[2] if len(entry) > 2 else ""
-            raw_category = entry[3] if len(entry) > 3 else ""
-            record["metadata"] = {"raw": list(entry)}
-        else:
-            continue
-
-        command_name = str(command_name or "").strip()
-        if not command_name:
-            continue
-
-        if isinstance(default_value, (dict, list)):
-            try:
-                default_value = json.dumps(default_value)
-            except Exception:
-                default_value = str(default_value)
-        elif default_value is None:
-            default_value = ""
-        else:
-            default_value = str(default_value)
-
-        description = "" if description is None else str(description)
-
-        if raw_category is None:
-            category = ""
-        else:
-            try:
-                category = str(raw_category)
-            except Exception:
-                category = ""
-            else:
-                category = category.strip()
-        if not category:
-            category = ""
-
-        record.update({
-            "name": command_name,
-            "value": default_value,
-            "description": description,
-            "category": category,
-        })
-        records.append(record)
 
     _command_library_last_error = None
     return records
 
-# ============================
-# Data
-# ============================
-@dataclass
-class DeviceResult:
-    IP: str
-    Name: str = ""
-    Version: str = ""
-    Core: str = ""
-    SDK: str = ""
-    Hardware: str = ""
-    Module: str = ""
-    TemplateName: str = ""
-    Hostname: str = ""
-    Mac: str = ""
-    MqttTopic: str = ""
-    MqttClient: str = ""
-    # Extra fields for Full mode
-    Uptime: str = ""
-    RestartReason: str = ""
-    FlashSize: str = ""
-    FreeMem: str = ""
-    RSSI: str = ""
-    IPAddress: str = ""
-    Gateway: str = ""
-    TelePeriod: str = ""
-    FriendlyName: str = ""
-    OtaUrl: str = ""
-    Ok: bool = False
-    Error: str = ""
-
-# ============================
-# Worker
-# ============================
 class Worker(QObject):
     progress = Signal(int, int)
-    log_line = Signal(str, str)  # (line, tag)
+    log_line = Signal(str, str)
     finished = Signal(str)
 
-    def __init__(self, ips, threads, out_dir,
-                 timeout, retries, backoff,
-                 send_backlog, commands, do_upgrade=False,
-                 selected_ips=None, ota_urls=None, info_mode="full",
-                 cmd_ips=None, fw_ips=None):
+    def __init__(
+        self,
+        ips,
+        threads,
+        out_dir,
+        timeout,
+        retries,
+        backoff,
+        send_backlog,
+        commands,
+        do_upgrade=False,
+        selected_ips=None,
+        ota_urls=None,
+        info_mode="full",
+        cmd_ips=None,
+        fw_ips=None,
+    ):
         super().__init__()
-        self.ips = ips
-        self.threads = max(1, int(threads))
-        self.out_dir = out_dir
-        self.timeout = max(1, float(timeout))
-        self.retries = max(1, int(retries))
-        self.backoff = float(backoff)
-        self.send_backlog = send_backlog
-        self.commands = commands[:] if commands else []
-        self.do_upgrade = bool(do_upgrade)
-        self.selected_ips = set(selected_ips or [])
-        self.cmd_ips = set(cmd_ips or self.selected_ips)
-        self.fw_ips = set(fw_ips or self.selected_ips)
-        self.xlsx_path = os.path.join(self.out_dir, DEFAULT_XLSX)
-        self.csv_path = os.path.join(self.out_dir, DEFAULT_CSV)
-        self.ota_urls = ota_urls or dict(OTA_URLS)
-        self.info_mode = "lite" if str(info_mode).lower().startswith("lite") else "full"
-
-    def _log(self, ip, name, msg, tag="INFO"):
-        ts = time.strftime("%H:%M:%S")
-        nm = f" [{name}]" if name else ""
-        line = f"{ts} [{tag}] [{ip}]{nm} {msg}"
-        self.log_line.emit(line, tag)
-
-    async def _get(self, client: httpx.AsyncClient, url: str):
-        last_err = ""
-        for attempt in range(1, self.retries + 1):
-            try:
-                r = await client.get(url, timeout=self.timeout)
-                if r.status_code == 200:
-                    return r
-                last_err = f"HTTP {r.status_code}"
-            except Exception as e:
-                last_err = str(e)
-            if attempt < self.retries:
-                await asyncio.sleep((2 ** (attempt - 1)) * self.backoff)
-        raise RuntimeError(last_err)
-
-    async def _send_cmd(self, client, ip, cmnd: str, expect_json=True):
-        enc = httpx.QueryParams({"cmnd": cmnd})
-        url = f"http://{ip}/cm?{enc}"
-        try:
-            r = await self._get(client, url)
-            return safe_extract_json(r.text) if expect_json else None, r.text
-        except Exception as e:
-            return None, str(e)
-
-    async def _collect_info_for_ip(self, client, ip) -> DeviceResult:
-        res = DeviceResult(IP=ip)
-        try:
-            s0, _ = await self._send_cmd(client, ip, "Status 0")
-        except Exception:
-            return res
-
-        if not isinstance(s0, dict):
-            return res
-
-        statusfwr = s0.get("StatusFWR", {}) or {}
-        status    = s0.get("Status", {}) or {}
-        statusnet = s0.get("StatusNET", {}) or {}
-        statusmqt = s0.get("StatusMQT", {}) or {}
-        statusprm = s0.get("StatusPRM", {}) or {}
-        statusmem = s0.get("StatusMEM", {}) or {}
-        statussts = s0.get("StatusSTS", {}) or {}
-
-        version = statusfwr.get("Version", "")
-        if not version or "tasmota" not in version.lower():
-            return res
-
-        res.Version      = version
-        res.Core         = statusfwr.get("Core", "")
-        res.SDK          = statusfwr.get("SDK", "")
-        res.Hardware     = statusfwr.get("Hardware", "")
-        res.Hostname     = statusnet.get("Hostname", "")
-        res.Mac          = statusnet.get("Mac", "")
-        res.Name         = status.get("DeviceName") or res.Hostname or "(unknown)"
-        res.Module       = str(status.get("Module", ""))
-        res.MqttTopic    = status.get("Topic", "")
-        res.MqttClient   = statusmqt.get("MqttClient", "")
-        res.TemplateName = ""
-
-        # Lite mode stops here
-        if self.info_mode == "lite":
-            res.Ok = True
-            return res
-
-        # Full mode extras
-        res.Uptime        = statusprm.get("Uptime", "")
-        res.RestartReason = statusfwr.get("RestartReason", "")
-        res.FlashSize     = statusmem.get("FlashSize", "")
-        res.FreeMem       = statusmem.get("FreeMem", "")
-        res.RSSI          = str(statussts.get("Wifi", {}).get("RSSI", ""))
-        res.IPAddress     = statusnet.get("IPAddress", "")
-        res.Gateway       = statusnet.get("Gateway", "")
-        res.TelePeriod    = str(status.get("TelePeriod", ""))
-        fnames            = status.get("FriendlyName") or []
-        if isinstance(fnames, list) and fnames:
-            res.FriendlyName = fnames[0]
-        res.OtaUrl        = statusprm.get("OtaUrl", "")
-
-        # Template name (best-effort)
-        try:
-            s5, _ = await self._send_cmd(client, ip, "Status 5")
-            if isinstance(s5, dict):
-                cfg = s5.get("StatusCFG") or s5.get("Status5") or {}
-                templ = cfg.get("Template")
-                if isinstance(templ, dict):
-                    res.TemplateName = (templ.get("NAME") or templ.get("Name") or "").strip()
-                elif isinstance(templ, str):
-                    try:
-                        tjson = json.loads(templ)
-                        if isinstance(tjson, dict):
-                            res.TemplateName = (tjson.get("NAME") or tjson.get("Name") or "").strip()
-                    except Exception:
-                        res.TemplateName = templ.strip()
-        except Exception:
-            pass
-
-        if not res.TemplateName:
-            try:
-                t, _ = await self._send_cmd(client, ip, "Template")
-                if isinstance(t, dict):
-                    res.TemplateName = (t.get("NAME") or t.get("Name") or "").strip()
-            except Exception:
-                pass
-
-        res.Ok = True
-        return res
-
-    async def _upgrade_device(self, client, ip, hw, name):
-        # Pick OTA URL based on hardware type (for upgrade)
-        ota_url = self.ota_urls["ESP32"] if "ESP32" in hw.upper() else self.ota_urls["ESP8266"]
-
-        # Send OTA upgrade command
-        self._log(ip, name, f"Sending OTA upgrade: {ota_url}", tag="OTA")
-        await self._send_cmd(client, ip, f"OtaUrl {ota_url}", expect_json=False)
-        await self._send_cmd(client, ip, "Upgrade 1", expect_json=False)
-
-        # Wait for upgrade process
-        self._log(ip, name, "Waiting 120s for OTA process...", tag="OTA")
-        await asyncio.sleep(120)
-
-        # Restart device after OTA
-        self._log(ip, name, "Sending Restart 1", tag="OTA")
-        await self._send_cmd(client, ip, "Restart 1", expect_json=False)
-        await asyncio.sleep(1)
-
-        # Poll until device comes back online
-        for attempt in range(18):  # 18 * 5s = 90s
-            await asyncio.sleep(5)
-            try:
-                res = await self._collect_info_for_ip(client, ip)
-                if res.Ok:
-                    self._log(ip, name, f"Device online, running FW: {res.Version}", tag="OTA")
-
-                    # ✅ Reapply the hardcoded release OTA URL
-                    default_url = OTA_URLS["ESP32"] if "ESP32" in hw.upper() else OTA_URLS["ESP8266"]
-                    await self._send_cmd(client, ip, f"OtaUrl {default_url}", expect_json=False)
-                    self._log(ip, name, f"Re-applied official OTA URL: {default_url}", tag="OTA")
-
-                    return True
-            except Exception:
-                pass
-
-        return False
-
-
-
-
-    async def _handle_ip(self, sem, client, ip):
-        async with sem:
-            try:
-                info = await self._collect_info_for_ip(client, ip)
-                if info.Ok:
-                    self._log(ip, info.Name, "Info OK", tag="INFO")
-
-                    # ✅ Always check if this IP was selected for actions
-                    if ip in self.selected_ips:
-                        if self.do_upgrade:
-                            # --- Firmware Upgrade Path ---
-                            ok = await self._upgrade_device(client, ip, info.Hardware, info.Name)
-
-                            # If upgrade worked and backlog is enabled → send backlog
-                            if ok and self.send_backlog:
-                                backlog = "; ".join(self.commands)
-                                self._log(ip, info.Name, "Sending backlog after upgrade...", tag="CMD")
-                                await self._send_cmd(client, ip, f"Backlog {backlog}", expect_json=False)
-
-                        elif self.send_backlog:
-                            # --- Backlog Only Path ---
-                            backlog = "; ".join(self.commands)
-                            self._log(ip, info.Name, "Sending backlog...", tag="CMD")
-                            await self._send_cmd(client, ip, f"Backlog {backlog}", expect_json=False)
-
-                else:
-                    self._log(ip, info.Name, "No response", tag="ERROR")
-
-                return info
-
-            except Exception as e:
-                self._log(ip, "", f"FAIL {e}", tag="ERROR")
-                return DeviceResult(IP=ip, Ok=False, Error=str(e))
-
-
-    async def run_async(self):
-        sem = asyncio.Semaphore(self.threads)
-        results = []
-        async with httpx.AsyncClient() as client:
-            tasks = [self._handle_ip(sem, client, ip) for ip in self.ips]
-            total = len(tasks)
-            done = 0
-            for coro in asyncio.as_completed(tasks):
-                res = await coro
-                results.append(res)
-                done += 1
-                self.progress.emit(done, total)
-
-        rows = []
-        for r in results:
-            if not r.Ok:
-                continue
-            base = {
-                "Name": r.Name, "IP": r.IP, "Version": r.Version,
-                "Core": r.Core, "SDK": r.SDK, "Hardware": r.Hardware,
-                "Module": r.Module, "TemplateName": r.TemplateName,
-                "Hostname": r.Hostname, "Mac": r.Mac,
-                "MqttTopic": r.MqttTopic, "MqttClient": r.MqttClient
-            }
-            if self.info_mode == "full":
-                base.update({
-                    "Uptime": r.Uptime,
-                    "RestartReason": r.RestartReason,
-                    "FlashSize": r.FlashSize,
-                    "FreeMem": r.FreeMem,
-                    "RSSI": r.RSSI,
-                    "IPAddress": r.IPAddress,
-                    "Gateway": r.Gateway,
-                    "TelePeriod": r.TelePeriod,
-                    "FriendlyName": r.FriendlyName,
-                    "OtaUrl": r.OtaUrl
-                })
-            rows.append(base)
-
-        if rows:
-            df = pd.DataFrame(rows).sort_values(by="Name", key=lambda col: col.str.lower())
-            ts_suffix = time.strftime("%Y%m%d_%H%M%S")
-
-            # Excel write with protection
-            try:
-                df.to_excel(self.xlsx_path, index=False, engine="openpyxl")
-                self._log("-", "", f"Excel written {self.xlsx_path}", tag="INFO")
-            except PermissionError:
-                alt_xlsx = os.path.join(
-                    self.out_dir, f"tasmota_hardware_summary_{ts_suffix}.xlsx"
-                )
-                df.to_excel(alt_xlsx, index=False, engine="openpyxl")
-                self._log("-", "", f"[WARN] Excel locked, wrote {alt_xlsx}", tag="WARN")
-
-            # CSV write with protection
-            try:
-                df.to_csv(self.csv_path, index=False)
-                self._log("-", "", f"CSV written   {self.csv_path}", tag="INFO")
-            except PermissionError:
-                alt_csv = os.path.join(
-                    self.out_dir, f"tasmota_hardware_summary_{ts_suffix}.csv"
-                )
-                df.to_csv(alt_csv, index=False)
-                self._log("-", "", f"[WARN] CSV locked, wrote {alt_csv}", tag="WARN")
-
-        self.finished.emit(self.xlsx_path)
+        self.executor = TasmotaBulkExecutor(
+            ips,
+            threads,
+            out_dir,
+            timeout,
+            retries,
+            backoff,
+            send_backlog,
+            commands,
+            do_upgrade=do_upgrade,
+            selected_ips=selected_ips,
+            ota_urls=ota_urls,
+            info_mode=info_mode,
+            cmd_ips=cmd_ips,
+            fw_ips=fw_ips,
+            progress_callback=self.progress.emit,
+            log_callback=self.log_line.emit,
+        )
 
     def run(self):
-        asyncio.run(self.run_async())
+        result = asyncio.run(self.executor.run_async())
+        self.finished.emit(result.xlsx_path)
 
 # ============================
 # Selection Window (with filters + OTA URL edits)
@@ -753,10 +338,18 @@ class CommandLibraryDialog(QDialog):
             self.table.setSizeAdjustPolicy(adjust_ignored)
 
         for row, record in enumerate(self.commands):
-            command = record.get("name", "") if isinstance(record, dict) else ""
-            category = record.get("category", "") if isinstance(record, dict) else ""
-            value = record.get("value", "") if isinstance(record, dict) else ""
-            description = record.get("description", "") if isinstance(record, dict) else ""
+            if isinstance(record, CommandRecord):
+                command = record.name
+                category = record.category
+                value = record.value
+                description = record.description
+            elif isinstance(record, dict):
+                command = record.get("name", "")
+                category = record.get("category", "")
+                value = record.get("value", "")
+                description = record.get("description", "")
+            else:
+                command = category = value = description = ""
 
             check_item = QTableWidgetItem()
             check_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
@@ -844,9 +437,12 @@ class CommandLibraryDialog(QDialog):
         seen = set()
         has_empty = False
         for record in self.commands:
-            if not isinstance(record, dict):
+            if isinstance(record, CommandRecord):
+                category = (record.category or "").strip()
+            elif isinstance(record, dict):
+                category = str(record.get("category", "") or "").strip()
+            else:
                 continue
-            category = str(record.get("category", "") or "").strip()
             if not category:
                 has_empty = True
                 continue

@@ -1,0 +1,5 @@
+from mobile.kivy_app.main import main
+
+
+if __name__ == "__main__":
+    main()

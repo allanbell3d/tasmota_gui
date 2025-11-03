@@ -1,0 +1,124 @@
+"""Command library helpers for Tasmota bulk tooling."""
+
+from __future__ import annotations
+
+import json
+import os
+from dataclasses import dataclass
+from typing import Iterable, List, Sequence
+
+COMMAND_LIBRARY = [
+    ("mqtthost 192.168.64.5", "Set the MQTT broker hostname."),
+    ("mqttuser villa", "Set the MQTT username."),
+    ("mqttpassword villa", "Set the MQTT password."),
+    ("FullTopic %prefix%/%topic%/", "Configure the MQTT topic template."),
+    ("TelePeriod 10", "Publish telemetry every 10 seconds."),
+    ("latitude 25.163853", "Set device latitude."),
+    ("longitude 55.219098", "Set device longitude."),
+    ("timezone +4", "Set timezone offset."),
+    ("powerretain on", "Retain power state over MQTT."),
+    ("wattres 2", "Set watt resolution to 2 decimals."),
+    ("EnergyRes 2", "Set energy resolution to 2 decimals."),
+    ("AmpRes 2", "Set ampere resolution to 2 decimals."),
+    ("switchretain off", "Disable switch retain."),
+    ("buttonretain off", "Disable button retain."),
+    ("poweronstate 3", "Restore last power state after reboot."),
+    ("SetOption56 1", "Enable instantaneous energy updates."),
+    ("SetOption57 1", "Enable cumulative energy updates."),
+    ("SetOption59 1", "Set switch mode to follow relay state."),
+    ("SetOption65 1", "Enable device LED for Wi-Fi status."),
+    ("WifiConfig 5", "Enable Wi-Fi SmartConfig and WPS."),
+]
+
+DEFAULT_COMMANDS = [command for command, _ in COMMAND_LIBRARY]
+
+
+class CommandLibraryError(RuntimeError):
+    """Raised when the command library cannot be read or parsed."""
+
+
+@dataclass
+class CommandRecord:
+    name: str
+    value: str
+    description: str
+    category: str
+    metadata: dict
+
+    def backlog_entry(self) -> str:
+        value = (self.value or "").strip()
+        return f"{self.name} {value}".strip()
+
+
+def _normalize_command_entry(entry) -> CommandRecord | None:
+    if isinstance(entry, dict):
+        normalized = {str(key).lower(): value for key, value in entry.items() if isinstance(key, str)}
+
+        def _get(*keys):
+            for key in keys:
+                if key in entry:
+                    return entry[key]
+            for key in keys:
+                lower = str(key).lower()
+                if lower in normalized:
+                    return normalized[lower]
+            return None
+
+        name = _get("command", "name", "cmd", "keyword")
+        value = _get("value", "default")
+        description = _get("description", "desc", "details")
+        category = _get("category", "section")
+        metadata = dict(entry)
+    elif isinstance(entry, (list, tuple)) and entry:
+        name = entry[0]
+        value = entry[1] if len(entry) > 1 else ""
+        description = entry[2] if len(entry) > 2 else ""
+        category = entry[3] if len(entry) > 3 else ""
+        metadata = {"raw": list(entry)}
+    else:
+        return None
+
+    name = str(name or "").strip()
+    if not name:
+        return None
+
+    if isinstance(value, (dict, list)):
+        try:
+            value = json.dumps(value)
+        except Exception:
+            value = str(value)
+    elif value is None:
+        value = ""
+    else:
+        value = str(value)
+
+    description = "" if description is None else str(description)
+    category = "" if category is None else str(category).strip()
+
+    return CommandRecord(name=name, value=value, description=description, category=category, metadata=metadata)
+
+
+def load_command_library(path: str | None = None) -> List[CommandRecord]:
+    """Load command records from a JSON file (default: project root)."""
+    if path is None:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        path = os.path.join(os.path.dirname(base_dir), "tasmota_commands.json")
+
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except FileNotFoundError as exc:
+        raise CommandLibraryError(f"Command library file not found: {path}") from exc
+    except Exception as exc:
+        raise CommandLibraryError(f"Failed to load command library: {exc}") from exc
+
+    if not isinstance(data, list):
+        raise CommandLibraryError("Command library JSON must contain a list of entries.")
+
+    records: List[CommandRecord] = []
+    for entry in data:
+        record = _normalize_command_entry(entry)
+        if record is not None:
+            records.append(record)
+
+    return records

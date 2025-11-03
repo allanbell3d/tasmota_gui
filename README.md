@@ -101,3 +101,4 @@ For detailed documentation, see [AGENTS.md](AGENTS.md).
 - 2025-09-27 v.0.1.2e: Added "Category" column to Command Library in order to facilitate filtering and loaded values from JSON command database.
 - 2025-09-27 v0.1.2e: Added "Category" column to Command Library in order to facilitate filtering and loaded values from JSON command database.
 - 2025-09-27 v0.1.2.f: Added Category Filter field in Command Library GUI.
+- 2025-09-27 v0.1.3: Bumped application version to 0.1.3.
