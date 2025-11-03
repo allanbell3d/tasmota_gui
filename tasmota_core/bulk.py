@@ -8,6 +8,7 @@ import os
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable, Iterable, List, Optional, Sequence, Set
 
 import httpx
@@ -84,12 +85,16 @@ class TasmotaBulkExecutor:
         self.export_results = out_dir is not None
         if self.export_results:
             self.out_dir = out_dir or os.getcwd()
-            self.xlsx_path = os.path.join(self.out_dir, DEFAULT_XLSX)
-            self.csv_path = os.path.join(self.out_dir, DEFAULT_CSV)
+            self._timestamp_suffix = time.strftime("%Y%m%d_%H%M%S")
+            timestamped_xlsx = self._with_timestamp(DEFAULT_XLSX)
+            timestamped_csv = self._with_timestamp(DEFAULT_CSV)
+            self.xlsx_path = os.path.join(self.out_dir, timestamped_xlsx)
+            self.csv_path = os.path.join(self.out_dir, timestamped_csv)
         else:
             self.out_dir = None
             self.xlsx_path = ""
             self.csv_path = ""
+            self._timestamp_suffix = ""
         self.timeout = max(1.0, float(timeout))
         self.retries = max(1, int(retries))
         self.backoff = float(backoff)
@@ -110,6 +115,14 @@ class TasmotaBulkExecutor:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+    def _with_timestamp(self, filename: str, *, extra_suffix: str = "") -> str:
+        suffix = self._timestamp_suffix or time.strftime("%Y%m%d_%H%M%S")
+        path = Path(filename)
+        if not path.suffix:
+            return f"{filename}_{suffix}"
+        extra = f"_{extra_suffix}" if extra_suffix else ""
+        return f"{path.stem}_{suffix}{extra}{path.suffix}"
+
     def _log(self, ip: str, name: str, message: str, tag: str = "INFO") -> None:
         if self.log_callback is None:
             return
@@ -352,12 +365,14 @@ class TasmotaBulkExecutor:
             rows_written = len(rows)
             if self.export_results:
                 df = pd.DataFrame(rows).sort_values(by="Name", key=lambda column: column.str.lower())
-                timestamp_suffix = time.strftime("%Y%m%d_%H%M%S")
                 try:
                     df.to_excel(self.xlsx_path, index=False, engine="openpyxl")
                     self._log("-", "", f"Excel written {self.xlsx_path}", tag="INFO")
                 except PermissionError:
-                    alt_xlsx = os.path.join(self.out_dir, f"tasmota_hardware_summary_{timestamp_suffix}.xlsx")
+                    alt_xlsx = os.path.join(
+                        self.out_dir,
+                        self._with_timestamp(DEFAULT_XLSX, extra_suffix="alt"),
+                    )
                     df.to_excel(alt_xlsx, index=False, engine="openpyxl")
                     self._log("-", "", f"[WARN] Excel locked, wrote {alt_xlsx}", tag="WARN")
                     self.xlsx_path = alt_xlsx
@@ -365,7 +380,10 @@ class TasmotaBulkExecutor:
                     df.to_csv(self.csv_path, index=False)
                     self._log("-", "", f"CSV written   {self.csv_path}", tag="INFO")
                 except PermissionError:
-                    alt_csv = os.path.join(self.out_dir, f"tasmota_hardware_summary_{timestamp_suffix}.csv")
+                    alt_csv = os.path.join(
+                        self.out_dir,
+                        self._with_timestamp(DEFAULT_CSV, extra_suffix="alt"),
+                    )
                     df.to_csv(alt_csv, index=False)
                     self._log("-", "", f"[WARN] CSV locked, wrote {alt_csv}", tag="WARN")
                     self.csv_path = alt_csv

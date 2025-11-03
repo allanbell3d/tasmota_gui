@@ -1,8 +1,9 @@
 # ============================
 # AllanBell3D Tasmota Bulk Tool (Cross-Platform GUI)
-# Version v0.1.4
+# Version v0.1.5
 # ============================
 
+import html
 import os
 import sys
 import time
@@ -17,9 +18,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView, QStyleOptionButton, QStyle, QComboBox
 )
 
-import pandas as pd
-
-from tasmota_core.bulk import DeviceResult, TasmotaBulkExecutor
+from tasmota_core.bulk import TasmotaBulkExecutor
 from tasmota_core.commands import (
     DEFAULT_COMMANDS,
     CommandLibraryError,
@@ -42,11 +41,20 @@ from tasmota_core.utils import build_ip_list
 # ============================
 APP_TITLE = f"AllanBell3D Tasmota Bulk Tool (Cross-Platform GUI) {APP_VERSION}"
 
+DEFAULT_OUTPUT_DIR_NAME = "Logs"
+
 _command_library_last_error = None
 
 # ============================
 # Helpers
 # ============================
+def _get_default_output_directory():
+    base_dir = os.getcwd()
+    default_dir = os.path.join(base_dir, DEFAULT_OUTPUT_DIR_NAME)
+    os.makedirs(default_dir, exist_ok=True)
+    return default_dir
+
+
 def _show_command_library_error(parent, message):
     global _command_library_last_error
     if _command_library_last_error == message:
@@ -70,7 +78,7 @@ def load_command_library_from_json(parent=None):
 class Worker(QObject):
     progress = Signal(int, int)
     log_line = Signal(str, str)
-    finished = Signal(str)
+    finished = Signal(object)
 
     def __init__(
         self,
@@ -111,7 +119,7 @@ class Worker(QObject):
 
     def run(self):
         result = self.executor.run()
-        self.finished.emit(result.xlsx_path)
+        self.finished.emit(result)
 
 # ============================
 # Selection Window (with filters + OTA URL edits)
@@ -193,6 +201,12 @@ class SelectionWindow(QDialog):
         v.addWidget(self.btn_save)
 
     def populate_table(self):
+        sort_was_enabled = self.table.isSortingEnabled()
+        header = self.table.horizontalHeader()
+        section = header.sortIndicatorSection()
+        order = header.sortIndicatorOrder()
+
+        self.table.setSortingEnabled(False)
         self.table.setRowCount(len(self.results))
         for i, r in enumerate(self.results):
             chk_cmd = QCheckBox(); chk_cmd.setStyleSheet("QCheckBox { margin-left:auto; margin-right:auto; }")
@@ -209,6 +223,10 @@ class SelectionWindow(QDialog):
             self.table.setItem(i,4,QTableWidgetItem(r.Hardware))
             self.table.setItem(i,5,QTableWidgetItem(r.IP))
             self.table.setItem(i,6,QTableWidgetItem(r.Mac))
+
+        self.table.setSortingEnabled(sort_was_enabled)
+        if sort_was_enabled and section >= 0:
+            self.table.sortItems(section, order)
 
     def apply_filters(self):
         query = (self.search_box.text() or "").lower()
@@ -751,13 +769,23 @@ class MainWindow(QWidget):
 
         self.txt_log = QTextEdit(); self.txt_log.setReadOnly(True); v.addWidget(self.txt_log)
         self.all_logs = []; self.current_log_filter = "ALL"
+        self._log_colors = {
+            "ERROR": QColor("red"),
+            "WARN": QColor("orange"),
+            "OTA": QColor("blue"),
+            "CMD": QColor("purple"),
+            "INFO": QColor("black"),
+            "DEFAULT": QColor("black"),
+        }
+        self._log_formats = {}
+        self._log_color_codes = {}
         self.btn_log_all.clicked.connect(lambda: self.set_log_filter("ALL"))
         self.btn_log_err.clicked.connect(lambda: self.set_log_filter("ERROR"))
         self.btn_log_ota.clicked.connect(lambda: self.set_log_filter("OTA"))
         self.btn_log_save.clicked.connect(self.save_log)
 
         # defaults & state
-        self.output_folder = os.getcwd()
+        self.output_folder = _get_default_output_directory()
         self.last_results = []
         self.last_cmds_selected = []
         self.last_fw_selected = []
@@ -781,15 +809,7 @@ class MainWindow(QWidget):
     def append_log(self, line, tag="INFO"):
         self.all_logs.append((line, tag))
         if self.current_log_filter in ("ALL", tag):
-            fmt = QTextCharFormat()
-            if tag == "ERROR":
-                fmt.setForeground(QColor("red"))
-            elif tag == "WARN":
-                fmt.setForeground(QColor("orange"))
-            elif tag == "OTA":
-                fmt.setForeground(QColor("blue"))
-            else:
-                fmt.setForeground(QColor("black"))
+            fmt = self._get_log_format(tag)
             cursor = self.txt_log.textCursor()
             cursor.movePosition(QTextCursor.End)
             cursor.insertText(line + "\n", fmt)
@@ -797,22 +817,38 @@ class MainWindow(QWidget):
 
     def set_log_filter(self, f):
         self.current_log_filter = f
-        self.txt_log.clear()
+        filtered_lines = []
         for line, tag in self.all_logs:
             if f == "ALL" or tag == f:
-                fmt = QTextCharFormat()
-                if tag == "ERROR":
-                    fmt.setForeground(QColor("red"))
-                elif tag == "WARN":
-                    fmt.setForeground(QColor("orange"))
-                elif tag == "OTA":
-                    fmt.setForeground(QColor("blue"))
-                else:
-                    fmt.setForeground(QColor("black"))
-                cursor = self.txt_log.textCursor()
-                cursor.movePosition(QTextCursor.End)
-                cursor.insertText(line + "\n", fmt)
-                self.txt_log.setTextCursor(cursor)
+                color = self._get_log_color_code(tag)
+                filtered_lines.append(
+                    f'<span style="color:{color}; white-space:pre-wrap">{html.escape(line)}</span>'
+                )
+        if filtered_lines:
+            self.txt_log.setHtml("<br/>".join(filtered_lines))
+        else:
+            self.txt_log.clear()
+        cursor = self.txt_log.textCursor()
+        cursor.movePosition(QTextCursor.End)
+        self.txt_log.setTextCursor(cursor)
+
+    def _get_log_color(self, tag):
+        return self._log_colors.get(tag, self._log_colors["DEFAULT"])
+
+    def _get_log_format(self, tag):
+        fmt = self._log_formats.get(tag)
+        if fmt is None:
+            fmt = QTextCharFormat()
+            fmt.setForeground(self._get_log_color(tag))
+            self._log_formats[tag] = fmt
+        return fmt
+
+    def _get_log_color_code(self, tag):
+        code = self._log_color_codes.get(tag)
+        if code is None:
+            code = self._get_log_color(tag).name()
+            self._log_color_codes[tag] = code
+        return code
 
     def save_log(self):
         ts_suffix = time.strftime("%Y%m%d_%H%M%S")
@@ -873,8 +909,14 @@ class MainWindow(QWidget):
         pct = int((c / t) * 100) if t else 0
         self.progress.setFormat(f"{c} / {t} ({pct}%)")
 
-    def on_finished(self, xlsx):
-        self.append_log(f"[INFO] Finished. Excel: {xlsx}", tag="INFO")
+    def on_finished(self, result):
+        if result is None:
+            return
+        self._update_last_results(result)
+        if result.xlsx_path:
+            self.append_log(f"[INFO] Finished. Excel: {result.xlsx_path}", tag="INFO")
+        if result.csv_path:
+            self.append_log(f"[INFO] CSV export: {result.csv_path}", tag="INFO")
         self.btn_start.setEnabled(True)
 
     def on_start(self):
@@ -897,24 +939,21 @@ class MainWindow(QWidget):
         self.worker.progress.connect(self.on_progress)
         self.worker.log_line.connect(self.append_log)
         self.worker.finished.connect(self.scan_done)
-        self.worker.finished.connect(self.worker_thread.quit)
+        self.worker.finished.connect(lambda *_: self.worker_thread.quit())
         self.btn_start.setEnabled(False)
         self.worker_thread.start()
 
-    def scan_done(self, xlsx):
-        self.append_log("[INFO] Scan completed", tag="INFO")
-        try:
-            df = pd.read_excel(xlsx)
-        except Exception as e:
-            QMessageBox.critical(self, "Read Error", f"Could not read Excel results:\n{e}")
+    def scan_done(self, result):
+        if result is None:
             self.btn_start.setEnabled(True)
             return
-
-        self.last_results.clear()
-        for row in df.to_dict(orient="records"):
-            r = DeviceResult(**row); r.Ok = True
-            self.last_results.append(r)
-        self.last_results.sort(key=lambda r: r.Name.lower())
+        self._update_last_results(result)
+        if result.xlsx_path:
+            self.append_log(f"[INFO] Scan completed. Excel: {result.xlsx_path}", tag="INFO")
+        else:
+            self.append_log("[INFO] Scan completed", tag="INFO")
+        if result.csv_path:
+            self.append_log(f"[INFO] CSV export: {result.csv_path}", tag="INFO")
         self.append_log(f"[INFO] Results refreshed: {len(self.last_results)} devices", tag="INFO")
         self.btn_start.setEnabled(True)
 
@@ -958,8 +997,12 @@ class MainWindow(QWidget):
         self.worker.progress.connect(self.on_progress)
         self.worker.log_line.connect(self.append_log)
         self.worker.finished.connect(self.on_finished)
-        self.worker.finished.connect(self.worker_thread.quit)
+        self.worker.finished.connect(lambda *_: self.worker_thread.quit())
         self.worker_thread.start()
+
+    def _update_last_results(self, result):
+        devices = [r for r in (result.results or []) if r.Ok]
+        self.last_results = sorted(devices, key=lambda r: (r.Name or "").lower())
 
 # ============================
 # Entry
