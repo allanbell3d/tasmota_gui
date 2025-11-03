@@ -24,6 +24,7 @@ Thumbs.db
 # PyInstaller build artifacts
 build/
 dist/
+releases/
 *.spec
 
 # Codex patch
