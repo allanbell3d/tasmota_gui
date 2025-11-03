@@ -17,6 +17,7 @@ venv/
 Thumbs.db
 
 # Build / logs / outputs
+.buildozer/
 *.log
 *.xlsx
 *.csv
@@ -28,12 +29,13 @@ AGENTS.md
 build/
 dist/
 
+
 # Ignore release builds and executables
 releases/
 *.exe
 *.msi
 *.zip
-
+*.rar
 
 # Codex patch
 *.diff
