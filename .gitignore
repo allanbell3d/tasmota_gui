@@ -26,6 +26,12 @@ Thumbs.db
 build/
 dist/
 *.spec
+# Ignore release builds and executables
+releases/
+*.exe
+*.msi
+*.zip
+
 
 # Codex patch
 *.diff
