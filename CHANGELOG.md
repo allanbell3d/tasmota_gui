@@ -13,13 +13,26 @@ This project follows **semantic versioning**:
 - **Cross-platform Kivy front-end** that mirrors the Compose prototype with tabbed discovery, command backlog, OTA planning, summary, and log views for mobile deployments.  The interface keeps panels scrollable on small displays while wiring them into shared networking routines.
 - **Command Library popup** for mobile with search, category filters, multi-select checkboxes, and backlog de-duplication so operators can reuse the same curated JSON dataset across desktop and Android builds.
 - **OTA planner workflow** that groups devices by platform, queues upgrades, and feeds backlog commands after firmware flashing, providing queue visibility and post-upgrade automation.
-- **Shared core package (`tasmota_core`)** that exposes reusable async discovery, backlog, OTA orchestration, command parsing, and utility helpers so both GUI stacks share consistent behaviour and export handling.
+- **Shared core package (`tasmota.core`)** that exposes reusable async discovery, backlog, OTA orchestration, command parsing, and utility helpers so both GUI stacks share consistent behaviour and export handling.
 - **Android packaging guide** describing the Buildozer workflow, requirements, and deployment commands for generating APKs directly from the Python sources.
-- **Unified entrypoint** that boots the mobile UI when running `python main.py`, matching the Buildozer configuration used for Android builds.
+- **Unified entrypoint** that boots the mobile UI when running `python -m apps.mobile`, matching the Buildozer configuration used for Android builds.
+- **Repository layout** that groups shared code under `src/tasmota`, launchers under `apps/`, platform packaging in `platform/`, and bundled assets in `assets/`.
 
 ### Changed
 - **Bulk executor ergonomics** now expose progress/log callbacks, Lite vs Full discovery modes, command/firmware targeting lists, OTA URL fallbacks, and resilient export handling to support the richer mobile workflows while retaining desktop parity.
 - **Result filtering** ensures only successful Tasmota responses populate the mobile summary tables so follow-up actions target valid devices.
+- **Runtime defaults** such as UI titles, output directories, platform-specific thread limits, and shared color palettes now live in `tasmota.core.constants` so desktop and mobile builds stay aligned.
+
+---
+
+## [v0.1.6] - 2025-09-28
+### Changed
+- Lowered the default Android discovery thread count to 20 (clamped to 32) and applied the same ceiling to command/OTA runs so mobile scans no longer overwhelm CPUs.
+- Kept non-active tabs interactive during discovery, command, and OTA operations by only disabling the panel running the current task.
+- Documented the Android concurrency defaults and bumped version metadata to **v0.1.6** across source, docs, and packaging.
+
+### Fixed
+- Prevented conflicting task launches by surfacing clearer warnings when a different scan type is already running.
 
 ---
 

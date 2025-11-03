@@ -1,6 +1,6 @@
 # Android Packaging with Buildozer
 
-This project ships a Kivy entrypoint (`mobile/kivy_app/main.py`) that mirrors the Compose UI from the previous Android prototype.  The Android package is generated with **Buildozer** so everything runs from the existing Python sources and the shared networking modules.
+This project ships a Kivy entrypoint (`apps/mobile.py`) that mirrors the Compose UI from the previous Android prototype.  The Android package is generated with **Buildozer** so everything runs from the existing Python sources and the shared networking modules.
 
 ## Prerequisites
 
@@ -22,9 +22,9 @@ This project ships a Kivy entrypoint (`mobile/kivy_app/main.py`) that mirrors th
 
 ## Project Layout
 
-* `mobile/kivy_app/main.py` – Kivy UI entrypoint.
-* `tasmota_core/` – shared discovery, command, and networking logic used by both the PySide6 and Kivy front-ends.
-* `buildozer.spec` – Buildozer configuration (points to the Kivy entrypoint and includes Python dependencies).
+* `apps/mobile.py` – Kivy UI entrypoint (also imported by the legacy `mobile/kivy_app/main.py` shim).
+* `src/tasmota/core/` – shared discovery, command, and networking logic used by both the PySide6 and Kivy front-ends.
+* `platform/android/buildozer.spec` – Buildozer configuration (points to the Kivy entrypoint and includes Python dependencies).
 
 ## First-Time Build
 
@@ -37,7 +37,7 @@ This project ships a Kivy entrypoint (`mobile/kivy_app/main.py`) that mirrors th
    buildozer android debug
    ```
    The first build downloads the Android SDK/NDK and all Python wheels, so it can take several minutes.
-3. The resulting debug APK is located in `bin/` (e.g., `bin/tasmotabulk-0.1.5-debug.apk`).
+3. The resulting debug APK is located in `bin/` (e.g., `bin/tasmotabulk-0.1.6-debug.apk`).
 
 ## Install on a Device or Emulator
 
@@ -58,6 +58,11 @@ buildozer android logcat
 * Modify Python dependencies inside `buildozer.spec` → `requirements`.
 * Update the application version or package name in the `[app]` section.
 * To perform a release build, run `buildozer android release` and sign the resulting AAB/APK as required.
+
+## Runtime defaults on Android
+
+* Discovery now defaults to **20 worker threads** on Android (clamped to a maximum of 32) via the shared `tasmota.core.constants.ANDROID_THREAD_DEFAULT` and `ANDROID_THREAD_MAX` values, reducing CPU contention on phones and tablets.
+* Command and OTA runs reuse the same Android-specific limits so scans stay responsive while you browse other tabs.
 
 ## Troubleshooting
 

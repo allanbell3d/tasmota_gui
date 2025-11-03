@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass
-from typing import Iterable, List, Sequence
+from pathlib import Path
+from typing import List
 
 COMMAND_LIBRARY = [
     ("mqtthost 192.168.64.5", "Set the MQTT broker hostname."),
@@ -101,11 +101,14 @@ def _normalize_command_entry(entry) -> CommandRecord | None:
 def load_command_library(path: str | None = None) -> List[CommandRecord]:
     """Load command records from a JSON file (default: project root)."""
     if path is None:
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-        path = os.path.join(os.path.dirname(base_dir), "tasmota_commands.json")
+        module_path = Path(__file__).resolve()
+        project_root = module_path.parents[3]
+        path = project_root / "assets" / "commands" / "tasmota_commands.json"
+    else:
+        path = Path(path)
 
     try:
-        with open(path, "r", encoding="utf-8") as handle:
+        with path.open("r", encoding="utf-8") as handle:
             data = json.load(handle)
     except FileNotFoundError as exc:
         raise CommandLibraryError(f"Command library file not found: {path}") from exc

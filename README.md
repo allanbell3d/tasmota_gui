@@ -15,14 +15,43 @@ Cross-platform **PySide6 GUI tool** to manage Tasmota devices in bulk on LAN.
 ---
 
 ## Versioning
-- **Current:** v0.1.5
+- **Current:** v0.1.6
 - **Roadmap:** Command library for easy configuration  
 
 ---
 
 ## Usage
 ```bash
-python tasmota_gui.py
+# Desktop (PySide6)
+python -m apps.desktop
+
+# Mobile / Kivy preview
+python -m apps.mobile
+```
+
+Package-specific tooling now lives under the `platform/` directory:
+
+```text
+platform/
+  android/   # Buildozer spec + docs
+  windows/   # PyInstaller script/spec
+  linux/     # AppImage/Debian packaging notes
+```
+
+Shared source is organised beneath `src/tasmota/`:
+
+```text
+src/
+  tasmota/
+    core/      # network + command helpers
+    ui/
+      desktop/ # PySide6 widgets and dialogs
+      mobile/  # Kivy layouts and views
+apps/
+  desktop.py   # desktop launcher
+  mobile.py    # mobile launcher
+assets/
+  commands/    # bundled command library JSON
 ```
 
 ---
@@ -103,3 +132,5 @@ For detailed documentation, see [AGENTS.md](AGENTS.md).
 - 2025-09-27 v0.1.2.f: Added Category Filter field in Command Library GUI.
 - 2025-09-27 v0.1.3: Bumped application version to 0.1.3.
 - 2025-09-27 v0.1.5: Device discovery stability improvements; bumped version metadata across the project.
+- 2025-09-28 v0.1.6: Lowered Android discovery thread defaults and kept other tabs responsive during scans.
+- 2025-09-28 Unreleased: Centralized runtime defaults (titles, log directory, thread limits, platform colors) in `tasmota.core.constants` for desktop and mobile parity.
