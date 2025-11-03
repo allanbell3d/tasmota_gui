@@ -122,33 +122,84 @@ class OTAPanel(BoxLayout):
 
         self.add_widget(Label(text="OTA Updates", size_hint_y=None, height=dp(36)))
 
-        filter_row = BoxLayout(size_hint_y=None, height=dp(56), spacing=dp(8))
-        filter_row.add_widget(Label(text="Platform", size_hint=(None, 1), width=dp(110)))
-        self.filter_spinner = Spinner(text="All", values=("All", "ESP8266", "ESP32"), size_hint=(None, 1), width=dp(140))
-        filter_row.add_widget(self.filter_spinner)
-        filter_row.add_widget(Label(text="Name", size_hint=(None, 1), width=dp(90)))
-        self.name_filter_input = TextInput(hint_text="Filter", multiline=False, size_hint=(None, 1), width=dp(200))
-        filter_row.add_widget(self.name_filter_input)
-        filter_row.add_widget(Label(text="IP", size_hint=(None, 1), width=dp(60)))
-        self.ip_filter_input = TextInput(hint_text="Filter", multiline=False, size_hint=(None, 1), width=dp(180))
-        filter_row.add_widget(self.ip_filter_input)
+        label_width = dp(110)
+
+        filters_section = BorderedBoxLayout(
+            orientation="vertical",
+            size_hint=(1, None),
+            spacing=dp(8),
+            padding=dp(8),
+        )
+        filters_section.bind(minimum_height=filters_section.setter("height"))
+
+        filters_grid = GridLayout(cols=1, size_hint=(1, None), spacing=dp(8))
+        filters_grid.bind(minimum_height=filters_grid.setter("height"))
+
+        reduced_row_height = dp(56 * 0.6)
+        platform_row = BoxLayout(size_hint_y=None, height=reduced_row_height, spacing=dp(8))
+        platform_row.add_widget(Label(text="Platform", size_hint=(None, 1), width=label_width))
+        self.platform_filter_value = "All"
+        platform_buttons = BoxLayout(orientation="horizontal", spacing=dp(8), size_hint=(1, 1))
+        self.platform_filter_buttons = {}
+
+        def add_platform_button(platform: str):
+            button = Button(
+                text=platform,
+                size_hint=(0.5, 1),
+                background_normal="",
+            )
+
+            def on_release(*_):
+                self._toggle_platform_filter(platform)
+
+            button.bind(on_release=on_release)
+            self.platform_filter_buttons[platform] = button
+            platform_buttons.add_widget(button)
+
+        add_platform_button("ESP8266")
+        add_platform_button("ESP32")
+        platform_row.add_widget(platform_buttons)
+        self._update_platform_filter_buttons()
+        filters_grid.add_widget(platform_row)
+
+        name_row = BoxLayout(size_hint_y=None, height=reduced_row_height, spacing=dp(8))
+        name_row.add_widget(Label(text="Name", size_hint=(None, 1), width=label_width))
+        self.name_filter_input = TextInput(
+            hint_text="Filter",
+            multiline=False,
+            size_hint=(1, 1),
+        )
+        name_row.add_widget(self.name_filter_input)
+        filters_grid.add_widget(name_row)
+
+        ip_row = BoxLayout(size_hint_y=None, height=reduced_row_height, spacing=dp(8))
+        ip_row.add_widget(Label(text="IP", size_hint=(None, 1), width=label_width))
+        self.ip_filter_input = TextInput(
+            hint_text="Filter",
+            multiline=False,
+            size_hint=(1, 1),
+        )
+        ip_row.add_widget(self.ip_filter_input)
         self.sort_spinner = Spinner(
             text="Name (A-Z)",
             values=("Name (A-Z)", "Name (Z-A)"),
-            size_hint=(None, 1),
-            width=dp(180),
+            size_hint=(1, 1),
         )
-        filter_row.add_widget(self.sort_spinner)
-        self.add_widget(filter_row)
+        ip_row.add_widget(self.sort_spinner)
+        filters_grid.add_widget(ip_row)
 
-        selection_row = BoxLayout(size_hint_y=None, height=dp(52), spacing=dp(8))
+        filters_section.add_widget(filters_grid)
+
+        selection_row = BoxLayout(size_hint_y=None, height=dp(52 * 0.6), spacing=dp(8))
         self.btn_select_all = Button(text="Select All")
         self.btn_select_all.bind(on_release=lambda *_: self._set_all_selection(True))
         selection_row.add_widget(self.btn_select_all)
         self.btn_clear_selection = Button(text="Clear")
         self.btn_clear_selection.bind(on_release=lambda *_: self._set_all_selection(False))
         selection_row.add_widget(self.btn_clear_selection)
-        self.add_widget(selection_row)
+        filters_section.add_widget(selection_row)
+
+        self.add_widget(filters_section)
 
         self.scroll = ScrollView(size_hint=(1, 1))
         self.device_container = GridLayout(cols=1, spacing=dp(6), size_hint_y=None, padding=dp(8))
@@ -156,8 +207,8 @@ class OTAPanel(BoxLayout):
         self.scroll.add_widget(self.device_container)
         self.add_widget(self.scroll)
 
-        self._rebuild_trigger = Clock.create_trigger(self._rebuild_rows, 0)
-        self.filter_spinner.bind(text=self._schedule_rebuild)
+        # Debounce rebuilds so rapid filter updates don't thrash the UI.
+        self._rebuild_trigger = Clock.create_trigger(self._rebuild_rows, 0.15)
         self.name_filter_input.bind(text=self._schedule_rebuild)
         self.ip_filter_input.bind(text=self._schedule_rebuild)
         self.sort_spinner.bind(text=self._schedule_rebuild)
@@ -165,40 +216,42 @@ class OTAPanel(BoxLayout):
         url_grid = BorderedBoxLayout(
             orientation="horizontal",
             size_hint=(1, None),
-            height=dp(220),
+            height=dp(220 * 0.4 * 1.3),
             spacing=dp(12),
             padding=dp(8),
         )
         esp8266_box = BoxLayout(orientation="vertical", spacing=dp(6), size_hint=(0.5, 1))
-        esp8266_box.add_widget(Label(text="ESP8266 OTA URL"))
+        esp8266_box.add_widget(
+            Label(text="ESP8266 OTA URL", size_hint=(1, None), height=dp(26 * 1.3))
+        )
         self.esp8266_input = TextInput(
             text=OTA_URLS["ESP8266"],
             multiline=False,
             size_hint=(1, None),
-            height=dp(44),
+            height=dp(44 * 0.65),
         )
         esp8266_box.add_widget(self.esp8266_input)
-        self.btn_queue_esp8266 = Button(text="Queue Selected (ESP8266)")
+        self.btn_queue_esp8266 = Button(text="Queue (ESP8266)", size_hint_y=None, height=dp(44 * 0.5))
         self.btn_queue_esp8266.bind(on_release=lambda *_: self._queue_selected("ESP8266"))
         esp8266_box.add_widget(self.btn_queue_esp8266)
         url_grid.add_widget(esp8266_box)
 
         esp32_box = BoxLayout(orientation="vertical", spacing=dp(6), size_hint=(0.5, 1))
-        esp32_box.add_widget(Label(text="ESP32 OTA URL"))
+        esp32_box.add_widget(Label(text="ESP32 OTA URL", size_hint=(1, None), height=dp(26 * 1.3)))
         self.esp32_input = TextInput(
             text=OTA_URLS["ESP32"],
             multiline=False,
             size_hint=(1, None),
-            height=dp(44),
+            height=dp(44 * 0.65),
         )
         esp32_box.add_widget(self.esp32_input)
-        self.btn_queue_esp32 = Button(text="Queue Selected (ESP32)")
+        self.btn_queue_esp32 = Button(text="Queue (ESP32)", size_hint_y=None, height=dp(44 * 0.5))
         self.btn_queue_esp32.bind(on_release=lambda *_: self._queue_selected("ESP32"))
         esp32_box.add_widget(self.btn_queue_esp32)
         url_grid.add_widget(esp32_box)
         self.add_widget(url_grid)
 
-        queue_row = BoxLayout(size_hint_y=None, height=dp(52), spacing=dp(8))
+        queue_row = BoxLayout(size_hint_y=None, height=dp(52 * 0.5), spacing=dp(8))
         self.queue_label = Label(text="Queued: 0", size_hint=(1, 1))
         queue_row.add_widget(self.queue_label)
         self.btn_clear_queue = Button(text="Clear Queue", size_hint=(None, 1), width=dp(180))
@@ -273,11 +326,12 @@ class OTAPanel(BoxLayout):
         self.btn_clear_selection.disabled = busy
         self.btn_queue_esp8266.disabled = busy
         self.btn_queue_esp32.disabled = busy
+        for button in getattr(self, "platform_filter_buttons", {}).values():
+            button.disabled = busy
         self.btn_run.disabled = busy
         self.btn_clear_queue.disabled = busy
         self.esp8266_input.disabled = busy
         self.esp32_input.disabled = busy
-        self.filter_spinner.disabled = busy
         self.name_filter_input.disabled = busy
         self.ip_filter_input.disabled = busy
         self.sort_spinner.disabled = busy
@@ -294,6 +348,27 @@ class OTAPanel(BoxLayout):
     def _goto_commands(self):
         if self.goto_commands_callback:
             self.goto_commands_callback()
+
+    def _toggle_platform_filter(self, platform: str):
+        current = getattr(self, "platform_filter_value", "All")
+        if current == platform:
+            self.platform_filter_value = "All"
+        else:
+            self.platform_filter_value = platform
+        self._update_platform_filter_buttons()
+        self._schedule_rebuild()
+
+    def _update_platform_filter_buttons(self):
+        selected = getattr(self, "platform_filter_value", "All")
+        default_bg = (0.9, 0.9, 0.9, 1)
+        selected_bg = (0.2, 0.5, 0.9, 1)
+        for platform, button in getattr(self, "platform_filter_buttons", {}).items():
+            if selected == platform:
+                button.background_color = selected_bg
+                button.color = (1, 1, 1, 1)
+            else:
+                button.background_color = default_bg
+                button.color = (0, 0, 0, 1)
 
     def _schedule_rebuild(self, *_):
         if self._rebuild_trigger is not None:
@@ -364,7 +439,7 @@ class OTAPanel(BoxLayout):
         return sorted(rows, key=key, reverse=reverse)
 
     def _matches_filters(self, row: OTARow) -> bool:
-        platform_filter = (self.filter_spinner.text or "All") if hasattr(self, "filter_spinner") else "All"
+        platform_filter = getattr(self, "platform_filter_value", "All")
         if platform_filter != "All" and row.platform != platform_filter:
             return False
         name_filter = (self.name_filter_input.text or "").strip().lower() if hasattr(self, "name_filter_input") else ""

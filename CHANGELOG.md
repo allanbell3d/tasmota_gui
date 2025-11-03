@@ -9,8 +9,15 @@ This project follows **semantic versioning**:
 ---
 
 ## [Unreleased]
+### Documentation
+- Recorded the Android/Windows packaging and run-time debugging steps used to
+  validate v0.1.7 in the README release verification checklist.
+
+---
+
+## [v0.1.7] - 2025-09-29
 ### Added
-- **Cross-platform Kivy front-end** that mirrors the Compose prototype with tabbed discovery, command backlog, OTA planning, summary, and log views for mobile deployments.  The interface keeps panels scrollable on small displays while wiring them into shared networking routines.
+- **Cross-platform Kivy front-end** that mirrors the Compose prototype with tabbed discovery, command backlog, OTA planning, summary, and log views for mobile deployments. The interface keeps panels scrollable on small displays while wiring them into shared networking routines.
 - **Command Library popup** for mobile with search, category filters, multi-select checkboxes, and backlog de-duplication so operators can reuse the same curated JSON dataset across desktop and Android builds.
 - **OTA planner workflow** that groups devices by platform, queues upgrades, and feeds backlog commands after firmware flashing, providing queue visibility and post-upgrade automation.
 - **Shared core package (`tasmota.core`)** that exposes reusable async discovery, backlog, OTA orchestration, command parsing, and utility helpers so both GUI stacks share consistent behaviour and export handling.

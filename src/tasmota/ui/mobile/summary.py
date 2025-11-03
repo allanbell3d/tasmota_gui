@@ -30,14 +30,12 @@ class SummaryHeader(BorderedBoxLayout):
     """Header row for the summary table."""
 
     def __init__(self, **kwargs):
-        super().__init__(
-            orientation="horizontal",
-            size_hint_y=None,
-            height=dp(44),
-            spacing=dp(8),
-            padding=(0, dp(6)),
-            **kwargs,
-        )
+        kwargs.setdefault("orientation", "horizontal")
+        kwargs.setdefault("size_hint_y", None)
+        kwargs.setdefault("height", dp(44))
+        kwargs.setdefault("spacing", dp(8))
+        kwargs.setdefault("padding", (0, dp(6)))
+        super().__init__(**kwargs)
 
         cmd_label = Label(
             text="Cmd",
@@ -70,13 +68,11 @@ class SummaryRow(BorderedBoxLayout):
     """Row showing a discovered device with action toggles."""
 
     def __init__(self, device, **kwargs):
-        super().__init__(
-            orientation="horizontal",
-            size_hint_y=None,
-            height=dp(72),
-            spacing=dp(8),
-            **kwargs,
-        )
+        kwargs.setdefault("orientation", "horizontal")
+        kwargs.setdefault("size_hint_y", None)
+        kwargs.setdefault("height", dp(72))
+        kwargs.setdefault("spacing", dp(8))
+        super().__init__(**kwargs)
         self.device = device
         self.platform = get_device_platform(device)
         checkbox_size = (dp(40), dp(40))
@@ -194,7 +190,7 @@ class SummaryPanel(BoxLayout):
 
         self.filter_label = Label(
             text="Filter",
-            halign="left",
+            halign="center",
             valign="middle",
             size_hint=(0.3, 1),
         )
@@ -206,10 +202,13 @@ class SummaryPanel(BoxLayout):
             size_hint=(0.7, 1),
             height=dp(48),
         )
+        self.filter_input.bind(height=self._update_filter_padding)
+        self.filter_input.bind(font_size=self._update_filter_padding)
+        Clock.schedule_once(lambda *_: self._update_filter_padding(), 0)
 
         self.sort_label = Label(
             text="Sort",
-            halign="left",
+            halign="center",
             valign="middle",
             size_hint=(0.3, 1),
         )
@@ -267,7 +266,8 @@ class SummaryPanel(BoxLayout):
         )
         self.queue_actions_box.add_widget(self.queue_feedback_label)
 
-        self.add_widget(self.controls_wrapper)
+        # controls_wrapper is already added earlier; avoid re-adding to prevent
+        # duplicate parent assignment errors when rebuilding the layout.
         self.add_widget(header)
         self.add_widget(self.scroll)
         self.add_widget(self.queue_actions_box)
@@ -276,7 +276,8 @@ class SummaryPanel(BoxLayout):
         self.device_map: Dict[str, Any] = {}
         self.row_map: Dict[str, SummaryRow] = {}
         self.displayed_rows: List[SummaryRow] = []
-        self._rebuild_trigger = Clock.create_trigger(self._rebuild_rows, 0)
+        self._rebuild_trigger = Clock.create_trigger(self._rebuild_rows, 0.15)
+        self._last_display_keys: List[str] = []
         self.filter_input.bind(text=self._schedule_rebuild)
         self.sort_spinner.bind(text=self._schedule_rebuild)
 
@@ -350,17 +351,19 @@ class SummaryPanel(BoxLayout):
         self.controls_wrapper.clear_widgets()
 
         is_wide = width >= self.CONTROLS_BREAKPOINT
-        row_kwargs = dict(size_hint_y=None, height=dp(52), spacing=dp(8))
+        base_row_height = dp(52)
+        compact_row_height = base_row_height * 0.6
+        row_kwargs = dict(size_hint_y=None, spacing=dp(8))
         if is_wide:
-            row = BoxLayout(**row_kwargs)
+            row = BorderedBoxLayout(**row_kwargs, height=compact_row_height, padding=(dp(6), dp(6)))
             row.add_widget(self.filter_label)
             row.add_widget(self.filter_input)
             row.add_widget(self.sort_label)
             row.add_widget(self.sort_spinner)
             self.controls_wrapper.add_widget(row)
         else:
-            filter_row = BoxLayout(**row_kwargs)
-            sort_row = BoxLayout(**row_kwargs)
+            filter_row = BorderedBoxLayout(**row_kwargs, height=compact_row_height, padding=(dp(6), dp(6)))
+            sort_row = BoxLayout(**row_kwargs, height=base_row_height)
             filter_row.add_widget(self.filter_label)
             filter_row.add_widget(self.filter_input)
             sort_row.add_widget(self.sort_label)
@@ -374,6 +377,14 @@ class SummaryPanel(BoxLayout):
         self.sort_label.size_hint_min_x = dp(80)
         self.filter_input.size_hint_x = 1 - self.filter_label.size_hint_x
         self.sort_spinner.size_hint_x = 1 - self.sort_label.size_hint_x
+
+    def _update_filter_padding(self, *_):
+        if not hasattr(self, "filter_input"):
+            return
+        line_height = getattr(self.filter_input, "line_height", 0) or 0
+        padding_y = max(0.0, (self.filter_input.height - line_height) / 2)
+        padding_x = dp(10)
+        self.filter_input.padding = (padding_x, padding_y)
 
     def _update_queue_layout(self, width: float):
         is_wide = width >= self.CONTROLS_BREAKPOINT
@@ -436,8 +447,8 @@ class SummaryPanel(BoxLayout):
             self._rebuild_trigger()
 
     def _rebuild_rows(self, *_):
-        self.container.clear_widgets()
-        self.displayed_rows = []
+        new_rows: List[SummaryRow] = []
+        new_keys: List[str] = []
         for device in self._iter_sorted_devices():
             if not self._matches_filter(device):
                 continue
@@ -446,8 +457,18 @@ class SummaryPanel(BoxLayout):
             if row is None:
                 row = SummaryRow(device)
                 self.row_map[key] = row
-            self.container.add_widget(row)
-            self.displayed_rows.append(row)
+            new_rows.append(row)
+            new_keys.append(key)
+
+        if new_keys != self._last_display_keys:
+            self.container.clear_widgets()
+            for row in new_rows:
+                self.container.add_widget(row)
+            self.displayed_rows = list(new_rows)
+            self._last_display_keys = list(new_keys)
+        else:
+            self.displayed_rows = list(new_rows)
+
         self.summary_label.text = f"Devices: {len(self.displayed_rows)}"
 
     def _iter_sorted_devices(self) -> List:

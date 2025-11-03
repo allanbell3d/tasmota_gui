@@ -16,6 +16,8 @@ from kivy.utils import escape_markup
 class LogPanel(BoxLayout):
     """Scrollable log output panel."""
 
+    skip_scroll_wrapper = True
+
     MAX_LINES = 1000
 
     def __init__(self, **kwargs):
@@ -98,7 +100,14 @@ class LogPanel(BoxLayout):
             candidate = line[1 : line.find("]")].upper()
             if candidate:
                 severity = candidate
-        color = palette.get(severity, "#37474F")
+
+        normalized = line.lower()
+        if "no response" in normalized:
+            color = "#F9A825"
+        elif "device responded" in normalized:
+            color = "#2E7D32"
+        else:
+            color = palette.get(severity, "#37474F")
         return f"[color={color}]{escape_markup(line)}[/color]"
 
     def _current_text_width(self) -> float:

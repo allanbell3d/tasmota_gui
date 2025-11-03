@@ -22,7 +22,7 @@ This project ships a Kivy entrypoint (`apps/mobile.py`) that mirrors the Compose
 
 ## Project Layout
 
-* `apps/mobile.py` – Kivy UI entrypoint (also imported by the legacy `mobile/kivy_app/main.py` shim).
+* `apps/mobile.py` – Kivy UI entrypoint used by the Android build.
 * `src/tasmota/core/` – shared discovery, command, and networking logic used by both the PySide6 and Kivy front-ends.
 * `platform/android/buildozer.spec` – Buildozer configuration (points to the Kivy entrypoint and includes Python dependencies).
 
@@ -37,7 +37,7 @@ This project ships a Kivy entrypoint (`apps/mobile.py`) that mirrors the Compose
    buildozer android debug
    ```
    The first build downloads the Android SDK/NDK and all Python wheels, so it can take several minutes.
-3. The resulting debug APK is located in `bin/` (e.g., `bin/tasmotabulk-0.1.6-debug.apk`).
+3. The resulting debug APK is located in `bin/` (e.g., `bin/tasmotabulk-0.1.7-debug.apk`).
 
 ## Install on a Device or Emulator
 

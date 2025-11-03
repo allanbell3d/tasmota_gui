@@ -32,9 +32,16 @@ class DiscoveryPanel(BoxLayout):
 
     info_mode = StringProperty("lite")
 
-    def __init__(self, discover_callback: Callable[[Dict], None], **kwargs):
+    def __init__(
+        self,
+        discover_callback: Callable[[Dict], None],
+        cancel_callback: Optional[Callable[[], None]] = None,
+        **kwargs,
+    ):
         super().__init__(orientation="vertical", spacing=dp(8), **kwargs)
         self.discover_callback = discover_callback
+        self.cancel_callback = cancel_callback
+        self._busy = False
 
         self._default_threads = self._determine_default_threads()
         self._max_threads = self._determine_max_threads()
@@ -45,6 +52,20 @@ class DiscoveryPanel(BoxLayout):
         self.timeout_input = TextInput(text=str(DEFAULT_TIMEOUT), multiline=False, input_filter="float")
         self.retries_input = TextInput(text=str(DEFAULT_RETRIES), multiline=False, input_filter="int")
         self.range_input = TextInput(text=DEFAULT_IP_RANGES, size_hint_y=None, height=dp(120))
+
+        self.progress_box = BoxLayout(
+            orientation="vertical",
+            size_hint_y=None,
+            height=0,
+            opacity=0,
+            spacing=dp(4),
+            padding=(0, dp(4)),
+        )
+        self.progress_label = Label(text="Scan Progress: 0%", size_hint_y=None, height=dp(24))
+        self.progress_bar = ProgressBar(max=1, value=0, size_hint_y=None, height=dp(18))
+        self.progress_box.add_widget(self.progress_label)
+        self.progress_box.add_widget(self.progress_bar)
+        self.add_widget(self.progress_box)
 
         header = Label(text="Discovery", size_hint_y=None, height=dp(36))
         self.add_widget(header)
@@ -77,22 +98,15 @@ class DiscoveryPanel(BoxLayout):
         self.add_widget(mode_box)
 
         self.btn_discover = Button(text="Discover Devices", size_hint_y=None, height=dp(60))
-        self.btn_discover.bind(on_release=lambda *_: self._emit_discover())
+        self.btn_discover.bind(on_release=lambda *_: self._on_button_press())
         self.add_widget(self.btn_discover)
 
-        self.progress_box = BoxLayout(
-            orientation="vertical",
-            size_hint_y=None,
-            height=0,
-            opacity=0,
-            spacing=dp(4),
-            padding=(0, dp(4)),
-        )
-        self.progress_label = Label(text="Scan Progress: 0%", size_hint_y=None, height=dp(24))
-        self.progress_bar = ProgressBar(max=1, value=0, size_hint_y=None, height=dp(18))
-        self.progress_box.add_widget(self.progress_label)
-        self.progress_box.add_widget(self.progress_bar)
-        self.add_widget(self.progress_box)
+    def _on_button_press(self):
+        if self._busy:
+            if self.cancel_callback:
+                self.cancel_callback()
+        else:
+            self._emit_discover()
 
     def _on_mode_change(self, spinner, value):
         self.info_mode = value.lower()
@@ -140,15 +154,18 @@ class DiscoveryPanel(BoxLayout):
         return DESKTOP_THREAD_MAX
 
     def set_busy(self, busy: bool):
-        self.btn_discover.disabled = busy
+        self._busy = bool(busy)
         self.thread_input.disabled = busy
         self.timeout_input.disabled = busy
         self.retries_input.disabled = busy
         self.range_input.disabled = busy
         self.mode_spinner.disabled = busy
-        self._set_progress_visible(busy)
-        if not busy:
-            self.update_progress(0, 0)
+        self.btn_discover.text = "Cancel Scan" if busy else "Discover Devices"
+        self.btn_discover.disabled = False
+        if busy:
+            self.show_progress()
+        else:
+            self.hide_progress()
 
     def _set_progress_visible(self, visible: bool):
         target_height = dp(58) if visible else 0

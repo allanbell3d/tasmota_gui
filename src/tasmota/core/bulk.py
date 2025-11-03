@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
@@ -12,7 +13,6 @@ from pathlib import Path
 from typing import Callable, Iterable, List, Optional, Sequence, Set
 
 import httpx
-import pandas as pd
 
 from .constants import DEFAULT_CSV, DEFAULT_XLSX, OTA_URLS
 from .utils import safe_extract_json
@@ -111,6 +111,8 @@ class TasmotaBulkExecutor:
         self.info_mode = "lite" if normalized_mode.startswith("lite") else "full"
         self.progress_callback = progress_callback
         self.log_callback = log_callback
+        self._cancel_event = threading.Event()
+        self.was_cancelled = False
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -134,6 +136,12 @@ class TasmotaBulkExecutor:
     def _emit_progress(self, done: int, total: int) -> None:
         if self.progress_callback is not None:
             self.progress_callback(done, total)
+
+    def cancel(self) -> None:
+        """Signal that the executor should cancel the current run."""
+
+        self.was_cancelled = True
+        self._cancel_event.set()
 
     def _get(self, client: httpx.Client, url: str) -> httpx.Response:
         last_error = ""
@@ -272,6 +280,8 @@ class TasmotaBulkExecutor:
         return False
 
     def _handle_ip(self, client: httpx.Client, ip: str) -> DeviceResult:
+        if self._cancel_event.is_set():
+            return DeviceResult(IP=ip, Ok=False, Error="Cancelled")
         try:
             info = self._collect_info_for_ip(client, ip)
             if info.Ok:
@@ -311,10 +321,14 @@ class TasmotaBulkExecutor:
             )
             timeout = httpx.Timeout(self.timeout)
             with httpx.Client(limits=limits, timeout=timeout) as client:
-                with ThreadPoolExecutor(max_workers=self.threads) as executor:
+                executor = ThreadPoolExecutor(max_workers=self.threads)
+                try:
                     future_map = {executor.submit(self._handle_ip, client, ip): ip for ip in self.ips}
                     completed = 0
                     for future in as_completed(future_map):
+                        if self._cancel_event.is_set():
+                            self.was_cancelled = True
+                            break
                         ip = future_map[future]
                         try:
                             device_result = future.result()
@@ -324,6 +338,11 @@ class TasmotaBulkExecutor:
                         results.append(device_result)
                         completed += 1
                         self._emit_progress(completed, total)
+                        if self._cancel_event.is_set():
+                            self.was_cancelled = True
+                            break
+                finally:
+                    executor.shutdown(wait=False, cancel_futures=True)
 
         rows = []
         for device in results:
@@ -364,30 +383,40 @@ class TasmotaBulkExecutor:
         if rows:
             rows_written = len(rows)
             if self.export_results:
-                df = pd.DataFrame(rows).sort_values(by="Name", key=lambda column: column.str.lower())
+                pandas_module = None
                 try:
-                    df.to_excel(self.xlsx_path, index=False, engine="openpyxl")
-                    self._log("-", "", f"Excel written {self.xlsx_path}", tag="INFO")
-                except PermissionError:
-                    alt_xlsx = os.path.join(
-                        self.out_dir,
-                        self._with_timestamp(DEFAULT_XLSX, extra_suffix="alt"),
+                    import pandas as pandas_module  # type: ignore[import-not-found]
+                except ModuleNotFoundError:
+                    self._log("-", "", "Pandas not available, skipping export", tag="WARN")
+                except ImportError as exc:
+                    self._log("-", "", f"Pandas import error ({exc}), skipping export", tag="WARN")
+                if pandas_module is not None:
+                    df = pandas_module.DataFrame(rows).sort_values(
+                        by="Name", key=lambda column: column.str.lower()
                     )
-                    df.to_excel(alt_xlsx, index=False, engine="openpyxl")
-                    self._log("-", "", f"[WARN] Excel locked, wrote {alt_xlsx}", tag="WARN")
-                    self.xlsx_path = alt_xlsx
-                try:
-                    df.to_csv(self.csv_path, index=False)
-                    self._log("-", "", f"CSV written   {self.csv_path}", tag="INFO")
-                except PermissionError:
-                    alt_csv = os.path.join(
-                        self.out_dir,
-                        self._with_timestamp(DEFAULT_CSV, extra_suffix="alt"),
-                    )
-                    df.to_csv(alt_csv, index=False)
-                    self._log("-", "", f"[WARN] CSV locked, wrote {alt_csv}", tag="WARN")
-                    self.csv_path = alt_csv
-                rows_written = len(df.index)
+                    try:
+                        df.to_excel(self.xlsx_path, index=False, engine="openpyxl")
+                        self._log("-", "", f"Excel written {self.xlsx_path}", tag="INFO")
+                    except PermissionError:
+                        alt_xlsx = os.path.join(
+                            self.out_dir,
+                            self._with_timestamp(DEFAULT_XLSX, extra_suffix="alt"),
+                        )
+                        df.to_excel(alt_xlsx, index=False, engine="openpyxl")
+                        self._log("-", "", f"[WARN] Excel locked, wrote {alt_xlsx}", tag="WARN")
+                        self.xlsx_path = alt_xlsx
+                    try:
+                        df.to_csv(self.csv_path, index=False)
+                        self._log("-", "", f"CSV written   {self.csv_path}", tag="INFO")
+                    except PermissionError:
+                        alt_csv = os.path.join(
+                            self.out_dir,
+                            self._with_timestamp(DEFAULT_CSV, extra_suffix="alt"),
+                        )
+                        df.to_csv(alt_csv, index=False)
+                        self._log("-", "", f"[WARN] CSV locked, wrote {alt_csv}", tag="WARN")
+                        self.csv_path = alt_csv
+                    rows_written = len(df.index)
         else:
             self._log("-", "", "No successful device responses", tag="WARN")
 

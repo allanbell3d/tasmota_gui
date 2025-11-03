@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
+import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List
+from typing import Iterable, List
 
 COMMAND_LIBRARY = [
     ("mqtthost 192.168.64.5", "Set the MQTT broker hostname."),
@@ -98,12 +99,40 @@ def _normalize_command_entry(entry) -> CommandRecord | None:
     return CommandRecord(name=name, value=value, description=description, category=category, metadata=metadata)
 
 
+def _candidate_roots(module_path: Path) -> Iterable[Path]:
+    """Yield possible root directories for bundled assets."""
+
+    if getattr(sys, "_MEIPASS", None):
+        yield Path(sys._MEIPASS)
+
+    for parent in module_path.parents:
+        yield parent
+
+
+def _default_command_library_path() -> Path:
+    """Return the most likely location of the bundled command library."""
+
+    module_path = Path(__file__).resolve()
+    seen: set[Path] = set()
+    for root in _candidate_roots(module_path):
+        if root in seen:
+            continue
+        seen.add(root)
+        candidate = root / "assets" / "commands" / "tasmota_commands.json"
+        if candidate.exists():
+            return candidate
+
+    # Fallback to the historical project layout relative to the source tree.
+    if len(module_path.parents) >= 4:
+        return module_path.parents[3] / "assets" / "commands" / "tasmota_commands.json"
+
+    return Path("assets/commands/tasmota_commands.json").resolve()
+
+
 def load_command_library(path: str | None = None) -> List[CommandRecord]:
     """Load command records from a JSON file (default: project root)."""
     if path is None:
-        module_path = Path(__file__).resolve()
-        project_root = module_path.parents[3]
-        path = project_root / "assets" / "commands" / "tasmota_commands.json"
+        path = _default_command_library_path()
     else:
         path = Path(path)
 

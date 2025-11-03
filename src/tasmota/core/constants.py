@@ -1,6 +1,6 @@
 """Shared constants for the Tasmota bulk tooling stack."""
 
-APP_VERSION = "v0.1.6"
+APP_VERSION = "v0.1.7"
 
 APP_TITLE_SUFFIX = "AllanBell3D Tasmota Bulk Tool (Cross-Platform GUI)"
 

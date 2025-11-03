@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import threading
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Tuple
 
+from kivy.animation import Animation
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.metrics import dp
 from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.floatlayout import FloatLayout
+from kivy.uix.image import Image
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.tabbedpanel import TabbedPanel, TabbedPanelItem
 
@@ -31,18 +34,73 @@ from .ota import OTAPanel
 from .summary import SummaryPanel
 
 
+class StaticLogoSplash(FloatLayout):
+    """Lightweight overlay that shows the static launch logo."""
+
+    __events__ = ("on_dismiss",)
+
+    def __init__(self, *, duration: Optional[float] = 10, **kwargs):
+        super().__init__(**kwargs)
+        self.size_hint = (1, 1)
+        self.pos_hint = {"x": 0, "y": 0}
+        self._dismissed = False
+        self._dismiss_event = None
+        if duration is not None:
+            self._dismiss_event = Clock.schedule_once(lambda dt: self.dismiss(), duration)
+
+        logo = Image(
+            source="assets/images/logo.png",
+            allow_stretch=True,
+            keep_ratio=False,
+            size_hint=(1, 1),
+            pos_hint={"x": 0, "y": 0},
+        )
+        self.add_widget(logo)
+
+    def dismiss(self, *_):
+        if self._dismissed:
+            return
+        self._dismissed = True
+        if self._dismiss_event is not None and not getattr(self._dismiss_event, "is_triggered", False):
+            self._dismiss_event.cancel()
+        self._dismiss_event = None
+        parent = self.parent
+        if parent is None:
+            self.dispatch("on_dismiss")
+            return
+
+        Animation.cancel_all(self)
+
+        def _finish(*_):
+            if self.parent is not None:
+                self.parent.remove_widget(self)
+            self.opacity = 1
+            self.dispatch("on_dismiss")
+
+        Animation(opacity=0, duration=10).bind(on_complete=_finish).start(self)
+
+    def on_dismiss(self, *_):  # pragma: no cover - dispatched event hook
+        pass
+
+
 class RootLayout(TabbedPanel):
     """Tabbed layout that coordinates the panels."""
 
+    __events__ = ("on_ready",)
+
     def __init__(self, **kwargs):
+        ready_callback: Optional[Callable[[], None]] = kwargs.pop("ready_callback", None)
         super().__init__(**kwargs)
         self.do_default_tab = False
         self.tab_height = "42dp"
 
         self.active_thread: Optional[threading.Thread] = None
+        self.active_executor: Optional[TasmotaBulkExecutor] = None
         self.tabs_by_title: Dict[str, TabbedPanelItem] = {}
+        self._ready_callback = ready_callback
+        self._ready_notified = False
 
-        self.discovery_panel = DiscoveryPanel(self._on_discover)
+        self.discovery_panel = DiscoveryPanel(self._on_discover, self._cancel_active_run)
         self.command_panel = CommandLibraryPanel(self._on_run_commands, self._show_ota_tab)
         self.ota_panel = OTAPanel(self._on_run_ota, self._show_commands_tab)
         self.summary_panel = SummaryPanel(
@@ -61,15 +119,31 @@ class RootLayout(TabbedPanel):
         Clock.schedule_once(lambda *_: self._show_tab("Discovery"), 0)
         self._active_run_context: Optional[str] = None
         self._active_busy_panels: Tuple[BoxLayout, ...] = ()
+        self._cancel_requested = False
 
     def _add_panel_tab(self, title: str, panel: BoxLayout):
         """Add a tab containing a panel inside a scroll view."""
 
         tab = TabbedPanelItem(text=title)
-        wrapped = self._wrap_in_scroll(panel)
+        wrapped = self._prepare_panel_widget(panel)
         tab.add_widget(wrapped)
         self.add_widget(tab)
         self.tabs_by_title[title] = tab
+
+    def _prepare_panel_widget(self, panel: BoxLayout):
+        """Wrap panels in a scroll view unless they opt out."""
+
+        if getattr(panel, "skip_scroll_wrapper", False):
+            container = BoxLayout(
+                orientation="vertical",
+                size_hint=(1, 1),
+                padding=dp(12),
+                spacing=dp(8),
+            )
+            container.add_widget(panel)
+            return container
+
+        return self._wrap_in_scroll(panel)
 
     def _wrap_in_scroll(self, panel: BoxLayout) -> ScrollView:
         """Wrap the provided panel in a ScrollView for small displays."""
@@ -168,13 +242,42 @@ class RootLayout(TabbedPanel):
                 records = load_command_library()
             except CommandLibraryError as exc:
                 Clock.schedule_once(
-                    lambda dt, err=exc: self.logs_panel.append_line(f"[ERROR] {err}"),
+                    lambda dt, err=exc: self._handle_command_library_error(err),
                     0,
                 )
-                records = []
-            Clock.schedule_once(lambda dt: self.command_panel.set_library(records), 0)
+                return
+            except Exception as exc:  # pragma: no cover - defensive for mobile builds
+                Clock.schedule_once(
+                    lambda dt, err=exc: self._handle_command_library_error(err),
+                    0,
+                )
+                return
+            Clock.schedule_once(lambda dt, rows=records: self._apply_command_library(rows), 0)
 
         threading.Thread(target=worker, daemon=True).start()
+
+    def _handle_command_library_error(self, exc: Exception):
+        self.logs_panel.append_line(f"[ERROR] {exc}")
+        self.command_panel.set_library([])
+        self._notify_ready()
+
+    def _apply_command_library(self, records):
+        self.command_panel.set_library(records)
+        self._notify_ready()
+
+    def _notify_ready(self):
+        if self._ready_notified:
+            return
+        self._ready_notified = True
+        self.dispatch("on_ready")
+        if self._ready_callback is not None:
+            try:
+                self._ready_callback()
+            except Exception:  # pragma: no cover - defensive callback protection
+                pass
+
+    def on_ready(self, *_):  # pragma: no cover - dispatched event hook
+        pass
 
     def _task_running(self) -> bool:
         thread = self.active_thread
@@ -202,6 +305,24 @@ class RootLayout(TabbedPanel):
         }
         return mapping.get(context, "another task")
 
+    def _cancel_active_run(self):
+        self._cancel_requested = True
+        if not self._task_running():
+            self.discovery_panel.set_busy(False)
+            self.discovery_panel.hide_progress()
+            return
+
+        self.logs_panel.append_line("[INFO] Cancelling active scan…")
+        executor = self.active_executor
+        if executor is not None:
+            executor.cancel()
+
+        for panel in self._active_busy_panels:
+            if hasattr(panel, "set_busy"):
+                panel.set_busy(False)
+
+        self.discovery_panel.hide_progress()
+
     def _read_runtime_inputs(self) -> Tuple[int, float, int, str]:
         threads = self.discovery_panel.get_thread_count()
         timeout = float(self.discovery_panel.timeout_input.text or DEFAULT_TIMEOUT)
@@ -226,6 +347,7 @@ class RootLayout(TabbedPanel):
         if self._guard_active_task("[WARN] Discovery already running", requested_context="discovery"):
             return
 
+        self._cancel_requested = False
         self.discovery_panel.set_busy(True)
         self.logs_panel.append_line("[INFO] Preparing discovery run…")
 
@@ -259,6 +381,15 @@ class RootLayout(TabbedPanel):
     def _start_discovery_with_ips(self, ips: Iterable[str], params: Dict):
         if self._guard_active_task("[WARN] Discovery already running", requested_context="discovery"):
             self.discovery_panel.set_busy(False)
+            return
+
+        if self._cancel_requested:
+            self.discovery_panel.set_busy(False)
+            self.discovery_panel.hide_progress()
+            self.summary_panel.update_progress(0, 0)
+            self.discovery_panel.update_progress(0, 0)
+            self.logs_panel.append_line("[INFO] Discovery cancelled.")
+            self._cancel_requested = False
             return
 
         ip_list = self._ensure_list(ips)
@@ -401,6 +532,8 @@ class RootLayout(TabbedPanel):
             progress_callback=progress_cb,
             log_callback=log_cb,
         )
+        self.active_executor = executor
+        self._cancel_requested = False
 
         def worker():
             result: Optional[BulkRunResult] = None
@@ -423,9 +556,19 @@ class RootLayout(TabbedPanel):
                 panel.set_busy(False)
         self._active_busy_panels = ()
         self.discovery_panel.hide_progress()
+        executor = self.active_executor
+        self.active_executor = None
         self.active_thread = None
         context = self._active_run_context or "generic"
         self._active_run_context = None
+        was_cancelled = self._cancel_requested or (executor.was_cancelled if executor else False)
+        self._cancel_requested = False
+        if was_cancelled and context == "discovery":
+            self.summary_panel.update_progress(0, 0)
+            self.discovery_panel.update_progress(0, 0)
+            self.logs_panel.append_line("[INFO] Discovery cancelled.")
+            return
+
         if result is not None:
             replace_summary = context == "discovery"
             self.summary_panel.set_results(result.results, replace=replace_summary)
@@ -448,7 +591,29 @@ class TasmotaKivyApp(App):
 
     def build(self):
         self.title = "Tasmota Bulk Tool"
-        return RootLayout()
+        self.root_layout = RootLayout(ready_callback=self._dismiss_splash)
+        container = FloatLayout(size_hint=(1, 1))
+
+        self._splash = StaticLogoSplash(duration=None)
+        self._splash.bind(on_dismiss=lambda *_: self._clear_splash())
+
+        container.add_widget(self._splash)
+        container.add_widget(self.root_layout, index=0)
+        self._splash_timeout = Clock.schedule_once(lambda *_: self._dismiss_splash(), 30)
+        return container
+
+    def _dismiss_splash(self, *_):
+        splash = getattr(self, "_splash", None)
+        if splash is not None:
+            splash.dismiss()
+
+    def _clear_splash(self):
+        if hasattr(self, "_splash"):
+            self._splash = None
+        timeout = getattr(self, "_splash_timeout", None)
+        if timeout is not None and not getattr(timeout, "is_triggered", False):
+            timeout.cancel()
+        self._splash_timeout = None
 
 
 def main():
