@@ -1,4 +1,4 @@
-"""Async routines for discovering and managing Tasmota devices."""
+"""Routines for discovering and managing Tasmota devices."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import asyncio
 import json
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from typing import Callable, Iterable, List, Optional, Sequence, Set
 
@@ -56,7 +57,7 @@ class BulkRunResult:
 
 
 class TasmotaBulkExecutor:
-    """Coordinate asynchronous discovery and command execution."""
+    """Coordinate concurrent discovery and command execution."""
 
     def __init__(
         self,
@@ -121,23 +122,23 @@ class TasmotaBulkExecutor:
         if self.progress_callback is not None:
             self.progress_callback(done, total)
 
-    async def _get(self, client: httpx.AsyncClient, url: str) -> httpx.Response:
+    def _get(self, client: httpx.Client, url: str) -> httpx.Response:
         last_error = ""
         for attempt in range(1, self.retries + 1):
             try:
-                response = await client.get(url, timeout=self.timeout)
+                response = client.get(url, timeout=self.timeout)
                 if response.status_code == 200:
                     return response
                 last_error = f"HTTP {response.status_code}"
             except Exception as exc:  # pragma: no cover - network errors vary
                 last_error = str(exc)
             if attempt < self.retries:
-                await asyncio.sleep((2 ** (attempt - 1)) * self.backoff)
+                time.sleep((2 ** (attempt - 1)) * self.backoff)
         raise RuntimeError(last_error)
 
-    async def _send_cmd(
+    def _send_cmd(
         self,
-        client: httpx.AsyncClient,
+        client: httpx.Client,
         ip: str,
         command: str,
         *,
@@ -146,15 +147,17 @@ class TasmotaBulkExecutor:
         params = httpx.QueryParams({"cmnd": command})
         url = f"http://{ip}/cm?{params}"
         try:
-            response = await self._get(client, url)
-            return (safe_extract_json(response.text) if expect_json else None, response.text)
+            response = self._get(client, url)
+            if expect_json:
+                return (safe_extract_json(response.text), response.text)
+            return (None, response.text)
         except Exception as exc:
             return (None, str(exc))
 
-    async def _collect_info_for_ip(self, client: httpx.AsyncClient, ip: str) -> DeviceResult:
+    def _collect_info_for_ip(self, client: httpx.Client, ip: str) -> DeviceResult:
         result = DeviceResult(IP=ip)
         try:
-            status0, _ = await self._send_cmd(client, ip, "Status 0")
+            status0, _ = self._send_cmd(client, ip, "Status 0")
         except Exception:
             return result
 
@@ -203,7 +206,7 @@ class TasmotaBulkExecutor:
         result.OtaUrl = statusprm.get("OtaUrl", "")
 
         try:
-            status5, _ = await self._send_cmd(client, ip, "Status 5")
+            status5, _ = self._send_cmd(client, ip, "Status 5")
             if isinstance(status5, dict):
                 cfg = status5.get("StatusCFG") or status5.get("Status5") or {}
                 template = cfg.get("Template")
@@ -221,7 +224,7 @@ class TasmotaBulkExecutor:
 
         if not result.TemplateName:
             try:
-                template, _ = await self._send_cmd(client, ip, "Template")
+                template, _ = self._send_cmd(client, ip, "Template")
                 if isinstance(template, dict):
                     result.TemplateName = (template.get("NAME") or template.get("Name") or "").strip()
             except Exception:
@@ -230,70 +233,84 @@ class TasmotaBulkExecutor:
         result.Ok = True
         return result
 
-    async def _upgrade_device(self, client: httpx.AsyncClient, ip: str, hardware: str, name: str) -> bool:
+    def _upgrade_device(self, client: httpx.Client, ip: str, hardware: str, name: str) -> bool:
         ota_url = self.ota_urls["ESP32"] if "ESP32" in hardware.upper() else self.ota_urls["ESP8266"]
         self._log(ip, name, f"Sending OTA upgrade: {ota_url}", tag="OTA")
-        await self._send_cmd(client, ip, f"OtaUrl {ota_url}", expect_json=False)
-        await self._send_cmd(client, ip, "Upgrade 1", expect_json=False)
+        self._send_cmd(client, ip, f"OtaUrl {ota_url}", expect_json=False)
+        self._send_cmd(client, ip, "Upgrade 1", expect_json=False)
         self._log(ip, name, "Waiting 120s for OTA process...", tag="OTA")
-        await asyncio.sleep(120)
+        time.sleep(120)
         self._log(ip, name, "Sending Restart 1", tag="OTA")
-        await self._send_cmd(client, ip, "Restart 1", expect_json=False)
-        await asyncio.sleep(1)
+        self._send_cmd(client, ip, "Restart 1", expect_json=False)
+        time.sleep(1)
 
         for _ in range(18):
-            await asyncio.sleep(5)
+            time.sleep(5)
             try:
-                result = await self._collect_info_for_ip(client, ip)
+                result = self._collect_info_for_ip(client, ip)
                 if result.Ok:
                     self._log(ip, name, f"Device online, running FW: {result.Version}", tag="OTA")
                     default_url = OTA_URLS["ESP32"] if "ESP32" in hardware.upper() else OTA_URLS["ESP8266"]
-                    await self._send_cmd(client, ip, f"OtaUrl {default_url}", expect_json=False)
+                    self._send_cmd(client, ip, f"OtaUrl {default_url}", expect_json=False)
                     self._log(ip, name, f"Re-applied official OTA URL: {default_url}", tag="OTA")
                     return True
             except Exception:
                 pass
         return False
 
-    async def _handle_ip(self, semaphore: asyncio.Semaphore, client: httpx.AsyncClient, ip: str) -> DeviceResult:
-        async with semaphore:
-            try:
-                info = await self._collect_info_for_ip(client, ip)
-                if info.Ok:
-                    self._log(ip, info.Name, "Info OK", tag="INFO")
-                    if ip in self.selected_ips:
-                        if self.do_upgrade and ip in self.fw_ips:
-                            upgraded = await self._upgrade_device(client, ip, info.Hardware, info.Name)
-                            if upgraded and self.send_backlog and ip in self.cmd_ips and self.commands:
-                                backlog = "; ".join(self.commands)
-                                self._log(ip, info.Name, "Sending backlog after upgrade...", tag="CMD")
-                                await self._send_cmd(client, ip, f"Backlog {backlog}", expect_json=False)
-                        elif self.send_backlog and ip in self.cmd_ips and self.commands:
+    def _handle_ip(self, client: httpx.Client, ip: str) -> DeviceResult:
+        try:
+            info = self._collect_info_for_ip(client, ip)
+            if info.Ok:
+                self._log(ip, info.Name, "Info OK", tag="INFO")
+                if ip in self.selected_ips:
+                    if self.do_upgrade and ip in self.fw_ips:
+                        upgraded = self._upgrade_device(client, ip, info.Hardware, info.Name)
+                        if upgraded and self.send_backlog and ip in self.cmd_ips and self.commands:
                             backlog = "; ".join(self.commands)
-                            self._log(ip, info.Name, "Sending backlog...", tag="CMD")
-                            await self._send_cmd(client, ip, f"Backlog {backlog}", expect_json=False)
-                else:
-                    self._log(ip, info.Name, "No response", tag="ERROR")
-                return info
-            except Exception as exc:
-                self._log(ip, "", f"FAIL {exc}", tag="ERROR")
-                return DeviceResult(IP=ip, Ok=False, Error=str(exc))
+                            self._log(ip, info.Name, "Sending backlog after upgrade...", tag="CMD")
+                            self._send_cmd(client, ip, f"Backlog {backlog}", expect_json=False)
+                    elif self.send_backlog and ip in self.cmd_ips and self.commands:
+                        backlog = "; ".join(self.commands)
+                        self._log(ip, info.Name, "Sending backlog...", tag="CMD")
+                        self._send_cmd(client, ip, f"Backlog {backlog}", expect_json=False)
+            else:
+                self._log(ip, info.Name, "No response", tag="ERROR")
+            return info
+        except Exception as exc:
+            self._log(ip, "", f"FAIL {exc}", tag="ERROR")
+            return DeviceResult(IP=ip, Ok=False, Error=str(exc))
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
-    async def run_async(self) -> BulkRunResult:
-        semaphore = asyncio.Semaphore(self.threads)
+    def _run_sync(self) -> BulkRunResult:
+        total = len(self.ips)
+        self._emit_progress(0, total)
+
         results: List[DeviceResult] = []
-        async with httpx.AsyncClient() as client:
-            tasks = [self._handle_ip(semaphore, client, ip) for ip in self.ips]
-            total = len(tasks)
-            completed = 0
-            for coroutine in asyncio.as_completed(tasks):
-                device_result = await coroutine
-                results.append(device_result)
-                completed += 1
-                self._emit_progress(completed, total)
+        if total == 0:
+            self._log("-", "", "No IP addresses provided", tag="WARN")
+        else:
+            limits = httpx.Limits(
+                max_connections=self.threads,
+                max_keepalive_connections=self.threads,
+            )
+            timeout = httpx.Timeout(self.timeout)
+            with httpx.Client(limits=limits, timeout=timeout) as client:
+                with ThreadPoolExecutor(max_workers=self.threads) as executor:
+                    future_map = {executor.submit(self._handle_ip, client, ip): ip for ip in self.ips}
+                    completed = 0
+                    for future in as_completed(future_map):
+                        ip = future_map[future]
+                        try:
+                            device_result = future.result()
+                        except Exception as exc:  # pragma: no cover - safety net
+                            self._log(ip, "", f"FAIL {exc}", tag="ERROR")
+                            device_result = DeviceResult(IP=ip, Ok=False, Error=str(exc))
+                        results.append(device_result)
+                        completed += 1
+                        self._emit_progress(completed, total)
 
         rows = []
         for device in results:
@@ -358,6 +375,12 @@ class TasmotaBulkExecutor:
 
         return BulkRunResult(results=results, xlsx_path=self.xlsx_path, csv_path=self.csv_path, rows_written=rows_written)
 
+    async def run_async(self) -> BulkRunResult:
+        """Run the executor in a background thread, returning when complete."""
+
+        return await asyncio.to_thread(self._run_sync)
+
     def run(self) -> BulkRunResult:
-        """Run the executor synchronously, managing the asyncio loop."""
-        return asyncio.run(self.run_async())
+        """Run the executor synchronously."""
+
+        return self._run_sync()

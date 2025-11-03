@@ -23,6 +23,15 @@ This project follows **semantic versioning**:
 
 ---
 
+## [v0.1.4] - 2025-09-27
+### Fixed
+- Ensured desktop and Kivy worker threads create and close their own asyncio event loops to avoid cross-thread crashes during discovery.
+
+### Changed
+- Bumped application version metadata to **v0.1.4** across source files, documentation, and Android packaging config.
+
+---
+
 ## [v0.1.3] - 2025-09-27
 ### Changed
 - Bumped application version metadata to **v0.1.3** across source and documentation.

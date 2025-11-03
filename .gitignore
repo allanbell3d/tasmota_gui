@@ -20,12 +20,11 @@ Thumbs.db
 *.log
 *.xlsx
 *.csv
+*.rej
 
 # PyInstaller build artifacts
 build/
 dist/
-releases/
-*.exe
 *.spec
 
 # Codex patch

@@ -1,9 +1,8 @@
 # ============================
 # AllanBell3D Tasmota Bulk Tool (Cross-Platform GUI)
-# Version v0.1.3
+# Version v0.1.4
 # ============================
 
-import asyncio
 import os
 import sys
 import time
@@ -111,7 +110,7 @@ class Worker(QObject):
         )
 
     def run(self):
-        result = asyncio.run(self.executor.run_async())
+        result = self.executor.run()
         self.finished.emit(result.xlsx_path)
 
 # ============================

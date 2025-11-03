@@ -2,17 +2,18 @@
 
 from __future__ import annotations
 
-import asyncio
 import threading
 from collections import deque
 from typing import Callable, Deque, Dict, Iterable, List, Optional, Set, Tuple
 
 from kivy.app import App
 from kivy.clock import Clock
+from kivy.metrics import dp
 from kivy.properties import StringProperty
 from kivy.graphics import Color, Line, Rectangle
 from kivy.graphics.instructions import InstructionGroup
 from kivy.uix.anchorlayout import AnchorLayout
+from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
 from kivy.uix.checkbox import CheckBox
@@ -58,6 +59,8 @@ ESP_PLATFORM_COLORS = {
 }
 
 ESP_PLATFORM_TEXT_COLOR = (0, 0, 0, 1)
+SUMMARY_ROW_TEXT_COLOR = (0, 0, 0, 1)
+CHECKBOX_BLACK = (0, 0, 0, 1)
 SUMMARY_HEADER_TEXT_COLOR = (1, 1, 1, 1)
 
 
@@ -75,8 +78,8 @@ class LogPanel(BoxLayout):
     MAX_LINES = 1000
 
     def __init__(self, **kwargs):
-        super().__init__(orientation="vertical", spacing=6, **kwargs)
-        self.label = Label(text="Logs", size_hint_y=None, height=30)
+        super().__init__(orientation="vertical", spacing=dp(6), **kwargs)
+        self.label = Label(text="Logs", size_hint_y=None, height=dp(30))
         self.add_widget(self.label)
 
         self.scroll = ScrollView(size_hint=(1, 1))
@@ -87,7 +90,7 @@ class LogPanel(BoxLayout):
             halign="left",
             valign="top",
             font_size="14sp",
-            padding=(8, 8),
+            padding=(dp(8), dp(8)),
         )
         self.log_lines: List[str] = []
         self._pending_lines: Deque[str] = deque()
@@ -159,7 +162,7 @@ class BorderedWidgetMixin:
         self._separator_group = InstructionGroup()
         with self.canvas.after:
             Color(*self.border_color)
-            self._border_line = Line(rectangle=(0, 0, 0, 0), width=1)
+            self._border_line = Line(rectangle=(0, 0, 0, 0), width=dp(1))
             self.canvas.after.add(self._separator_group)
         self._update_trigger = Clock.create_trigger(self._update_borders, -1)
         self._tracked_children: Set = set()
@@ -192,7 +195,7 @@ class BorderedWidgetMixin:
             return
         self._separator_group.add(Color(*self.separator_color))
         for points in self._separator_points():
-            self._separator_group.add(Line(points=points, width=1))
+            self._separator_group.add(Line(points=points, width=dp(1)))
 
     def _separator_points(self) -> List[Tuple[float, float, float, float]]:
         points: List[Tuple[float, float, float, float]] = []
@@ -266,12 +269,19 @@ class SummaryHeader(BorderedBoxLayout):
     """Header row for the summary table."""
 
     def __init__(self, **kwargs):
-        super().__init__(orientation="horizontal", size_hint_y=None, height=36, spacing=8, padding=(0, 6), **kwargs)
+        super().__init__(
+            orientation="horizontal",
+            size_hint_y=None,
+            height=dp(44),
+            spacing=dp(8),
+            padding=(0, dp(6)),
+            **kwargs,
+        )
 
         cmd_label = Label(
             text="Cmd",
             size_hint=(None, 1),
-            width=60,
+            width=dp(88),
             halign="center",
             valign="middle",
             color=SUMMARY_HEADER_TEXT_COLOR,
@@ -282,7 +292,7 @@ class SummaryHeader(BorderedBoxLayout):
         ota_label = Label(
             text="OTA",
             size_hint=(None, 1),
-            width=60,
+            width=dp(88),
             halign="center",
             valign="middle",
             color=SUMMARY_HEADER_TEXT_COLOR,
@@ -299,11 +309,19 @@ class SummaryRow(BorderedBoxLayout):
     """Row showing a discovered device with action toggles."""
 
     def __init__(self, device, **kwargs):
-        super().__init__(orientation="horizontal", size_hint_y=None, height=44, spacing=8, **kwargs)
+        super().__init__(
+            orientation="horizontal",
+            size_hint_y=None,
+            height=dp(72),
+            spacing=dp(8),
+            **kwargs,
+        )
         self.device = device
         self.platform = get_device_platform(device)
-        self.cmd_checkbox = CheckBox(size_hint=(None, None), size=(32, 32))
-        self.fw_checkbox = CheckBox(size_hint=(None, None), size=(32, 32))
+        checkbox_color = CHECKBOX_BLACK
+        checkbox_size = (dp(40), dp(40))
+        self.cmd_checkbox = CheckBox(size_hint=(None, None), size=checkbox_size, color=checkbox_color)
+        self.fw_checkbox = CheckBox(size_hint=(None, None), size=checkbox_size, color=checkbox_color)
 
         with self.canvas.before:
             self._bg_color = Color(*ESP_PLATFORM_COLORS.get(self.platform, ESP_PLATFORM_COLORS["UNKNOWN"]))
@@ -311,13 +329,13 @@ class SummaryRow(BorderedBoxLayout):
         self.bind(pos=self._update_background, size=self._update_background)
         self._apply_platform_color()
 
-        cmd_holder = AnchorLayout(anchor_x="center", anchor_y="center", size_hint=(None, 1), width=60)
+        cmd_holder = AnchorLayout(anchor_x="center", anchor_y="center", size_hint=(None, 1), width=dp(88))
         cmd_holder.add_widget(self.cmd_checkbox)
 
-        fw_holder = AnchorLayout(anchor_x="center", anchor_y="center", size_hint=(None, 1), width=60)
+        fw_holder = AnchorLayout(anchor_x="center", anchor_y="center", size_hint=(None, 1), width=dp(88))
         fw_holder.add_widget(self.fw_checkbox)
 
-        info_box = BoxLayout(orientation="vertical", spacing=2)
+        info_box = BoxLayout(orientation="vertical", spacing=dp(4))
         self.name_label = Label(text=f"{device.Name or device.Hostname}", halign="left", valign="middle")
         self.name_label.bind(width=lambda inst, _: setattr(inst, "text_size", (inst.width, None)))
         info_box.add_widget(self.name_label)
@@ -372,7 +390,7 @@ class SummaryRow(BorderedBoxLayout):
         if hasattr(self, "_bg_color"):
             color = ESP_PLATFORM_COLORS.get(self.platform, ESP_PLATFORM_COLORS["UNKNOWN"])
             self._bg_color.rgba = color
-            text_color = ESP_PLATFORM_TEXT_COLOR
+            text_color = SUMMARY_ROW_TEXT_COLOR
             for attr in ("name_label", "meta_label", "hardware_label"):
                 label = getattr(self, attr, None)
                 if label is not None:
@@ -383,18 +401,23 @@ class SummaryPanel(BoxLayout):
     """Displays the list of discovered devices and current progress."""
 
     def __init__(self, **kwargs):
-        super().__init__(orientation="vertical", **kwargs)
-        self.progress_label = Label(text="Progress: 0 / 0", size_hint_y=None, height=32)
-        self.summary_label = Label(text="Devices: 0", size_hint_y=None, height=28)
+        super().__init__(orientation="vertical", spacing=dp(8), **kwargs)
+        self.progress_label = Label(text="Progress: 0 / 0", size_hint_y=None, height=dp(40))
+        self.summary_label = Label(text="Devices: 0", size_hint_y=None, height=dp(36))
         self.add_widget(self.progress_label)
         self.add_widget(self.summary_label)
 
-        controls = BoxLayout(size_hint_y=None, height=40, spacing=8)
-        controls.add_widget(Label(text="Filter", size_hint=(None, 1), width=70))
+        controls = BoxLayout(size_hint_y=None, height=dp(56), spacing=dp(8))
+        controls.add_widget(Label(text="Filter", size_hint=(None, 1), width=dp(96)))
         self.filter_input = TextInput(hint_text="Search devices", multiline=False, size_hint=(1, 1))
         controls.add_widget(self.filter_input)
-        controls.add_widget(Label(text="Sort", size_hint=(None, 1), width=60))
-        self.sort_spinner = Spinner(text="Name", values=("Name", "Device Type", "IP", "Firmware"), size_hint=(None, 1), width=160)
+        controls.add_widget(Label(text="Sort", size_hint=(None, 1), width=dp(88)))
+        self.sort_spinner = Spinner(
+            text="Name",
+            values=("Name", "Device Type", "IP", "Firmware"),
+            size_hint=(None, 1),
+            width=dp(200),
+        )
         controls.add_widget(self.sort_spinner)
         self.add_widget(controls)
 
@@ -402,7 +425,7 @@ class SummaryPanel(BoxLayout):
         self.add_widget(self.header)
 
         self.scroll = ScrollView(size_hint=(1, 1))
-        self.container = GridLayout(cols=1, spacing=6, size_hint_y=None, padding=4)
+        self.container = GridLayout(cols=1, spacing=dp(6), size_hint_y=None, padding=dp(8))
         self.container.bind(minimum_height=self.container.setter("height"))
         self.scroll.add_widget(self.container)
         self.add_widget(self.scroll)
@@ -511,42 +534,42 @@ class SummaryPanel(BoxLayout):
         return any(query in value.lower() for value in values if value)
 
 
+class CommandLabelButton(ButtonBehavior, Label):
+    """Label styled control that behaves like a button."""
+
+
 class CommandLibraryRow(BorderedBoxLayout):
     """Single command entry with checkbox."""
 
-    MIN_HEIGHT = 56
+    MIN_HEIGHT = dp(68)
 
     def __init__(self, record: CommandRecord, **kwargs):
-        super().__init__(orientation="horizontal", size_hint_y=None, spacing=8, padding=(0, 6), **kwargs)
+        super().__init__(
+            orientation="horizontal",
+            size_hint_y=None,
+            spacing=dp(8),
+            padding=(0, dp(6)),
+            **kwargs,
+        )
         self.record = record
-        self.checkbox = CheckBox(size_hint=(None, None), size=(32, 32))
+        checkbox_size = (dp(40), dp(40))
+        self.checkbox = CheckBox(size_hint=(None, None), size=checkbox_size)
 
-        checkbox_holder = AnchorLayout(anchor_x="center", anchor_y="center", size_hint=(None, 1), width=48)
+        checkbox_holder = AnchorLayout(anchor_x="center", anchor_y="center", size_hint=(None, 1), width=dp(64))
         checkbox_holder.add_widget(self.checkbox)
         self.add_widget(checkbox_holder)
 
-        command_box = BoxLayout(orientation="vertical", size_hint=(0.6, 1), spacing=2)
+        command_box = BoxLayout(orientation="vertical", size_hint=(0.6, 1), spacing=dp(4))
 
-        self.command_label = Label(
+        self.command_label = CommandLabelButton(
             text="",
             markup=True,
             halign="left",
             valign="top",
         )
         self.command_label.size_hint_y = None
+        self.command_label.bind(on_release=self._show_description_popup)
         command_box.add_widget(self.command_label)
-
-        self.description_label = Label(
-            text="",
-            halign="left",
-            valign="top",
-            font_size="12sp",
-            color=(0.7, 0.7, 0.7, 1),
-        )
-        self.description_label.size_hint_y = None
-        self.description_label.opacity = 0
-        self.description_label.height = 0
-        command_box.add_widget(self.description_label)
 
         self.category_label = Label(
             text="",
@@ -571,7 +594,8 @@ class CommandLibraryRow(BorderedBoxLayout):
         self.value_label.height = 0
         self.add_widget(self.value_label)
 
-        self._labels = [self.command_label, self.value_label, self.description_label, self.category_label]
+        self._labels = [self.command_label, self.value_label, self.category_label]
+        self._description_text = ""
 
         for label in self._labels:
             if label is None:
@@ -592,9 +616,9 @@ class CommandLibraryRow(BorderedBoxLayout):
         value_text = (record.value or "").strip()
 
         self._set_label_text(self.command_label, f"[b]{command_text}[/b]" if command_text else "")
-        self._set_label_text(self.description_label, description_text)
         self._set_label_text(self.category_label, f"Category: {category_text}" if category_text else "")
         self._set_label_text(self.value_label, value_text)
+        self._description_text = description_text
 
         self._recalculate_height()
 
@@ -607,7 +631,7 @@ class CommandLibraryRow(BorderedBoxLayout):
         label.opacity = 1 if text else 0
         label.texture_update()
         if text:
-            label.height = label.texture_size[1] + 4
+            label.height = label.texture_size[1] + dp(4)
         else:
             label.height = 0
 
@@ -617,26 +641,51 @@ class CommandLibraryRow(BorderedBoxLayout):
     def _on_label_texture(self, label: Label, *_):
         if hasattr(label, "texture_size"):
             if label.text:
-                label.height = label.texture_size[1] + 4
+                label.height = label.texture_size[1] + dp(4)
             else:
                 label.height = 0
         Clock.schedule_once(lambda *_: self._recalculate_height(), 0)
 
     def _recalculate_height(self):
         command_height = self.command_label.texture_size[1] if self.command_label.text else 0
-        description_height = (
-            self.description_label.texture_size[1]
-            if self.description_label is not None and self.description_label.text
-            else 0
-        )
         category_height = (
             self.category_label.texture_size[1]
             if self.category_label is not None and self.category_label.text
             else 0
         )
         value_height = self.value_label.texture_size[1] if self.value_label.text else 0
-        content_height = max(command_height + description_height + category_height, value_height)
-        self.height = max(self.MIN_HEIGHT, content_height + 16)
+        content_height = max(command_height + category_height, value_height)
+        self.height = max(self.MIN_HEIGHT, content_height + dp(16))
+
+    def _show_description_popup(self, *_):
+        if not self._description_text:
+            return
+
+        layout = BoxLayout(orientation="vertical", spacing=dp(12), padding=dp(12))
+        title = (self.record.name or "Command Description").strip() or "Command Description"
+
+        description_label = Label(
+            text=self._description_text,
+            halign="left",
+            valign="top",
+            size_hint=(1, None),
+        )
+        description_label.bind(
+            texture_size=lambda inst, size: setattr(inst, "height", max(size[1], dp(10)))
+        )
+        description_label.bind(width=lambda inst, _: setattr(inst, "text_size", (inst.width, None)))
+        description_label.text_size = (0, None)
+
+        scroll = ScrollView(size_hint=(1, 1))
+        scroll.add_widget(description_label)
+        layout.add_widget(scroll)
+
+        close_button = Button(text="Close", size_hint_y=None, height=dp(48))
+        layout.add_widget(close_button)
+
+        popup = Popup(title=title, content=layout, size_hint=(0.9, 0.6))
+        close_button.bind(on_release=lambda *_: popup.dismiss())
+        popup.open()
 
 
 class CommandLibraryPanel(BoxLayout):
@@ -648,7 +697,7 @@ class CommandLibraryPanel(BoxLayout):
         goto_ota_callback: Optional[Callable[[], None]] = None,
         **kwargs,
     ):
-        super().__init__(orientation="vertical", spacing=8, **kwargs)
+        super().__init__(orientation="vertical", spacing=dp(8), **kwargs)
         self.send_callback = send_callback
         self.goto_ota_callback = goto_ota_callback
         self.library_rows: List[CommandLibraryRow] = []
@@ -659,13 +708,13 @@ class CommandLibraryPanel(BoxLayout):
 
         self._ensure_library_components()
 
-        self.backlog_label = Label(text="Backlog Commands", size_hint_y=None, height=28)
+        self.backlog_label = Label(text="Backlog Commands", size_hint_y=None, height=dp(36))
         self.backlog_input = TextInput(text="\n".join(DEFAULT_COMMANDS), multiline=True, size_hint=(1, 0.4))
 
         self.add_widget(self.backlog_label)
         self.add_widget(self.backlog_input)
 
-        controls = BoxLayout(size_hint_y=None, height=40, spacing=8)
+        controls = BoxLayout(size_hint_y=None, height=dp(52), spacing=dp(8))
         self.btn_open_library = Button(text="Open Command Library")
         self.btn_open_library.bind(on_release=lambda *_: self._open_library_popup())
         controls.add_widget(self.btn_open_library)
@@ -674,14 +723,14 @@ class CommandLibraryPanel(BoxLayout):
         controls.add_widget(self.btn_clear_backlog)
         self.add_widget(controls)
 
-        nav_box = BoxLayout(size_hint_y=None, height=40, spacing=8)
+        nav_box = BoxLayout(size_hint_y=None, height=dp(52), spacing=dp(8))
         nav_box.add_widget(Label(text="Need firmware?", size_hint=(0.6, 1)))
         self.btn_open_ota = Button(text="OTA Updates")
         self.btn_open_ota.bind(on_release=lambda *_: self._open_ota())
         nav_box.add_widget(self.btn_open_ota)
         self.add_widget(nav_box)
 
-        self.btn_send = Button(text="Run Selected", size_hint_y=None, height=48)
+        self.btn_send = Button(text="Run Selected", size_hint_y=None, height=dp(60))
         self.btn_send.bind(on_release=lambda *_: self._emit_send())
         self.add_widget(self.btn_send)
 
@@ -707,13 +756,13 @@ class CommandLibraryPanel(BoxLayout):
     def _ensure_library_components(self):
         if hasattr(self, "library_container") and self.library_container is not None:
             return
-        self.library_container = GridLayout(cols=1, spacing=6, size_hint_y=None, padding=4)
+        self.library_container = GridLayout(cols=1, spacing=dp(6), size_hint_y=None, padding=dp(8))
         self.library_container.bind(minimum_height=self.library_container.setter("height"))
         self.library_scroll = ScrollView(size_hint=(1, 1))
         self.library_scroll.add_widget(self.library_container)
-        self.search_input = TextInput(hint_text="Search commands", multiline=False, size_hint_y=None, height=40)
+        self.search_input = TextInput(hint_text="Search commands", multiline=False, size_hint_y=None, height=dp(48))
         self.search_input.bind(text=self._on_search_text)
-        self.category_spinner = Spinner(text="All categories", size_hint_y=None, height=40)
+        self.category_spinner = Spinner(text="All categories", size_hint_y=None, height=dp(48))
         self.category_spinner.bind(text=lambda *_: self._refresh_library_rows())
         self.btn_add_selected = Button(text="Add")
         self.btn_add_selected.bind(on_release=self._add_selected_to_backlog)
@@ -723,19 +772,19 @@ class CommandLibraryPanel(BoxLayout):
         self._ensure_library_components()
         if self.library_popup is not None:
             return
-        content = BoxLayout(orientation="vertical", spacing=8, padding=8)
-        content.add_widget(Label(text="Command Library", size_hint_y=None, height=24))
-        filters = BoxLayout(orientation="vertical", spacing=6, size_hint_y=None)
+        content = BoxLayout(orientation="vertical", spacing=dp(8), padding=dp(8))
+        content.add_widget(Label(text="Command Library", size_hint_y=None, height=dp(32)))
+        filters = BoxLayout(orientation="vertical", spacing=dp(6), size_hint_y=None)
         filters.add_widget(self.search_input)
-        category_row = BorderedBoxLayout(size_hint_y=None, height=40, spacing=8)
-        category_row.add_widget(Label(text="Category", size_hint=(None, 1), width=90))
+        category_row = BorderedBoxLayout(size_hint_y=None, height=dp(48), spacing=dp(8))
+        category_row.add_widget(Label(text="Category", size_hint=(None, 1), width=dp(110)))
         category_row.add_widget(self.category_spinner)
         filters.add_widget(category_row)
         filters.height = self.search_input.height + category_row.height + filters.spacing
         content.add_widget(filters)
 
-        header = BorderedBoxLayout(orientation="horizontal", size_hint_y=None, height=28, spacing=8)
-        header_select = Label(text="", size_hint=(None, 1), width=48)
+        header = BorderedBoxLayout(orientation="horizontal", size_hint_y=None, height=dp(36), spacing=dp(8))
+        header_select = Label(text="", size_hint=(None, 1), width=dp(64))
         header_command = Label(text="[b]Command[/b]", markup=True, size_hint=(0.6, 1), halign="left", valign="middle")
         header_value = Label(text="[b]Value[/b]", markup=True, size_hint=(0.4, 1), halign="left", valign="middle")
         for label in (header_command, header_value):
@@ -746,7 +795,7 @@ class CommandLibraryPanel(BoxLayout):
         content.add_widget(header)
 
         content.add_widget(self.library_scroll)
-        button_row = BoxLayout(size_hint_y=None, height=40, spacing=8)
+        button_row = BoxLayout(size_hint_y=None, height=dp(52), spacing=dp(8))
         button_row.add_widget(self.btn_add_selected)
         btn_close = Button(text="Close")
         btn_close.bind(on_release=lambda *_: self.library_popup.dismiss() if self.library_popup else None)
@@ -804,7 +853,7 @@ class CommandLibraryPanel(BoxLayout):
                 Label(
                     text="No commands available.",
                     size_hint=(1, None),
-                    height=40,
+                    height=dp(48),
                     color=(0.7, 0.7, 0.7, 1),
                 )
             )
@@ -850,7 +899,7 @@ class CommandLibraryPanel(BoxLayout):
                 Label(
                     text="No commands match your filters.",
                     size_hint=(1, None),
-                    height=40,
+                    height=dp(48),
                     color=(0.7, 0.7, 0.7, 1),
                 )
             )
@@ -885,19 +934,19 @@ class OTARow(BorderedBoxLayout):
     """Single row representing a device in the OTA planner."""
 
     def __init__(self, device, **kwargs):
-        super().__init__(orientation="horizontal", size_hint_y=None, height=48, spacing=8, **kwargs)
+        super().__init__(orientation="horizontal", size_hint_y=None, height=dp(68), spacing=dp(8), **kwargs)
         self.device = device
         self.platform = get_device_platform(device)
-        self.checkbox = CheckBox(size_hint=(None, None), size=(32, 32))
+        self.checkbox = CheckBox(size_hint=(None, None), size=(dp(40), dp(40)), color=CHECKBOX_BLACK)
         with self.canvas.before:
             self._bg_color = Color(*ESP_PLATFORM_COLORS.get(self.platform, ESP_PLATFORM_COLORS["UNKNOWN"]))
             self._bg_rect = Rectangle(pos=self.pos, size=self.size)
         self.bind(pos=self._update_background, size=self._update_background)
-        checkbox_holder = AnchorLayout(anchor_x="center", anchor_y="center", size_hint=(None, 1), width=60)
+        checkbox_holder = AnchorLayout(anchor_x="center", anchor_y="center", size_hint=(None, 1), width=dp(88))
         checkbox_holder.add_widget(self.checkbox)
         self.add_widget(checkbox_holder)
 
-        info_box = BoxLayout(orientation="vertical", spacing=2)
+        info_box = BoxLayout(orientation="vertical", spacing=dp(4))
         name = device.Name or device.Hostname or device.IP
         self.name_label = Label(text=name, halign="left", valign="middle")
         self.name_label.bind(width=lambda inst, _: setattr(inst, "text_size", (inst.width, None)))
@@ -920,7 +969,7 @@ class OTARow(BorderedBoxLayout):
         info_box.add_widget(self.version_label)
         self.add_widget(info_box)
 
-        self.queue_label = Label(text="", size_hint=(None, 1), width=110)
+        self.queue_label = Label(text="", size_hint=(None, 1), width=dp(140))
         self.add_widget(self.queue_label)
 
         self._apply_platform_styles()
@@ -965,7 +1014,7 @@ class OTAPanel(BoxLayout):
         goto_commands_callback: Optional[Callable[[], None]] = None,
         **kwargs,
     ):
-        super().__init__(orientation="vertical", spacing=8, **kwargs)
+        super().__init__(orientation="vertical", spacing=dp(8), **kwargs)
         self.run_callback = run_callback
         self.goto_commands_callback = goto_commands_callback
         self.results = []
@@ -973,28 +1022,28 @@ class OTAPanel(BoxLayout):
         self.row_map: Dict[str, OTARow] = {}
         self.queue: Dict[str, Set[str]] = {"ESP8266": set(), "ESP32": set()}
 
-        self.add_widget(Label(text="OTA Updates", size_hint_y=None, height=30))
+        self.add_widget(Label(text="OTA Updates", size_hint_y=None, height=dp(36)))
 
-        filter_row = BoxLayout(size_hint_y=None, height=40, spacing=8)
-        filter_row.add_widget(Label(text="Platform", size_hint=(None, 1), width=90))
-        self.filter_spinner = Spinner(text="All", values=("All", "ESP8266", "ESP32"), size_hint=(None, 1), width=120)
+        filter_row = BoxLayout(size_hint_y=None, height=dp(56), spacing=dp(8))
+        filter_row.add_widget(Label(text="Platform", size_hint=(None, 1), width=dp(110)))
+        self.filter_spinner = Spinner(text="All", values=("All", "ESP8266", "ESP32"), size_hint=(None, 1), width=dp(140))
         filter_row.add_widget(self.filter_spinner)
-        filter_row.add_widget(Label(text="Name", size_hint=(None, 1), width=70))
-        self.name_filter_input = TextInput(hint_text="Filter", multiline=False, size_hint=(None, 1), width=160)
+        filter_row.add_widget(Label(text="Name", size_hint=(None, 1), width=dp(90)))
+        self.name_filter_input = TextInput(hint_text="Filter", multiline=False, size_hint=(None, 1), width=dp(200))
         filter_row.add_widget(self.name_filter_input)
-        filter_row.add_widget(Label(text="IP", size_hint=(None, 1), width=40))
-        self.ip_filter_input = TextInput(hint_text="Filter", multiline=False, size_hint=(None, 1), width=140)
+        filter_row.add_widget(Label(text="IP", size_hint=(None, 1), width=dp(60)))
+        self.ip_filter_input = TextInput(hint_text="Filter", multiline=False, size_hint=(None, 1), width=dp(180))
         filter_row.add_widget(self.ip_filter_input)
         self.sort_spinner = Spinner(
             text="Name (A-Z)",
             values=("Name (A-Z)", "Name (Z-A)"),
             size_hint=(None, 1),
-            width=150,
+            width=dp(180),
         )
         filter_row.add_widget(self.sort_spinner)
         self.add_widget(filter_row)
 
-        selection_row = BoxLayout(size_hint_y=None, height=40, spacing=8)
+        selection_row = BoxLayout(size_hint_y=None, height=dp(52), spacing=dp(8))
         self.btn_select_all = Button(text="Select All")
         self.btn_select_all.bind(on_release=lambda *_: self._set_all_selection(True))
         selection_row.add_widget(self.btn_select_all)
@@ -1004,7 +1053,7 @@ class OTAPanel(BoxLayout):
         self.add_widget(selection_row)
 
         self.scroll = ScrollView(size_hint=(1, 1))
-        self.device_container = GridLayout(cols=1, spacing=6, size_hint_y=None, padding=4)
+        self.device_container = GridLayout(cols=1, spacing=dp(6), size_hint_y=None, padding=dp(8))
         self.device_container.bind(minimum_height=self.device_container.setter("height"))
         self.scroll.add_widget(self.device_container)
         self.add_widget(self.scroll)
@@ -1015,19 +1064,35 @@ class OTAPanel(BoxLayout):
         self.ip_filter_input.bind(text=self._schedule_rebuild)
         self.sort_spinner.bind(text=self._schedule_rebuild)
 
-        url_grid = BorderedGridLayout(cols=2, size_hint_y=None, height=160, row_default_height=40, spacing=8)
-        esp8266_box = BoxLayout(orientation="vertical", spacing=4)
+        url_grid = BorderedBoxLayout(
+            orientation="horizontal",
+            size_hint=(1, None),
+            height=dp(220),
+            spacing=dp(12),
+            padding=dp(8),
+        )
+        esp8266_box = BoxLayout(orientation="vertical", spacing=dp(6), size_hint=(0.5, 1))
         esp8266_box.add_widget(Label(text="ESP8266 OTA URL"))
-        self.esp8266_input = TextInput(text=OTA_URLS["ESP8266"], multiline=False)
+        self.esp8266_input = TextInput(
+            text=OTA_URLS["ESP8266"],
+            multiline=False,
+            size_hint=(1, None),
+            height=dp(44),
+        )
         esp8266_box.add_widget(self.esp8266_input)
         self.btn_queue_esp8266 = Button(text="Queue Selected (ESP8266)")
         self.btn_queue_esp8266.bind(on_release=lambda *_: self._queue_selected("ESP8266"))
         esp8266_box.add_widget(self.btn_queue_esp8266)
         url_grid.add_widget(esp8266_box)
 
-        esp32_box = BoxLayout(orientation="vertical", spacing=4)
+        esp32_box = BoxLayout(orientation="vertical", spacing=dp(6), size_hint=(0.5, 1))
         esp32_box.add_widget(Label(text="ESP32 OTA URL"))
-        self.esp32_input = TextInput(text=OTA_URLS["ESP32"], multiline=False)
+        self.esp32_input = TextInput(
+            text=OTA_URLS["ESP32"],
+            multiline=False,
+            size_hint=(1, None),
+            height=dp(44),
+        )
         esp32_box.add_widget(self.esp32_input)
         self.btn_queue_esp32 = Button(text="Queue Selected (ESP32)")
         self.btn_queue_esp32.bind(on_release=lambda *_: self._queue_selected("ESP32"))
@@ -1035,15 +1100,15 @@ class OTAPanel(BoxLayout):
         url_grid.add_widget(esp32_box)
         self.add_widget(url_grid)
 
-        queue_row = BoxLayout(size_hint_y=None, height=40, spacing=8)
+        queue_row = BoxLayout(size_hint_y=None, height=dp(52), spacing=dp(8))
         self.queue_label = Label(text="Queued: 0", size_hint=(1, 1))
         queue_row.add_widget(self.queue_label)
-        self.btn_clear_queue = Button(text="Clear Queue", size_hint=(None, 1), width=140)
+        self.btn_clear_queue = Button(text="Clear Queue", size_hint=(None, 1), width=dp(180))
         self.btn_clear_queue.bind(on_release=lambda *_: self._clear_queue())
         queue_row.add_widget(self.btn_clear_queue)
         self.add_widget(queue_row)
 
-        action_row = BoxLayout(size_hint_y=None, height=48, spacing=8)
+        action_row = BoxLayout(size_hint_y=None, height=dp(60), spacing=dp(8))
         self.btn_run = Button(text="Run OTA Updates")
         self.btn_run.bind(on_release=lambda *_: self._run_updates())
         action_row.add_widget(self.btn_run)
@@ -1207,21 +1272,29 @@ class DiscoveryPanel(BoxLayout):
     info_mode = StringProperty("lite")
 
     def __init__(self, discover_callback: Callable[[Dict], None], **kwargs):
-        super().__init__(orientation="vertical", spacing=8, **kwargs)
+        super().__init__(orientation="vertical", spacing=dp(8), **kwargs)
         self.discover_callback = discover_callback
 
         self.thread_input = TextInput(text=str(DEFAULT_THREADS), multiline=False, input_filter="int")
         self.timeout_input = TextInput(text=str(DEFAULT_TIMEOUT), multiline=False, input_filter="float")
         self.retries_input = TextInput(text=str(DEFAULT_RETRIES), multiline=False, input_filter="int")
-        self.range_input = TextInput(text=DEFAULT_IP_RANGES, size_hint=(1, 0.5))
+        self.range_input = TextInput(text=DEFAULT_IP_RANGES, size_hint_y=None, height=dp(120))
 
-        header = Label(text="Discovery", size_hint_y=None, height=30)
+        header = Label(text="Discovery", size_hint_y=None, height=dp(36))
         self.add_widget(header)
 
-        self.add_widget(Label(text="IP Ranges", size_hint_y=None, height=24))
+        self.add_widget(Label(text="IP Ranges", size_hint_y=None, height=dp(32)))
         self.add_widget(self.range_input)
 
-        grid = BorderedGridLayout(cols=2, size_hint_y=None, height=90, row_default_height=30)
+        grid = BorderedGridLayout(
+            cols=2,
+            size_hint_y=None,
+            height=dp(152),
+            row_default_height=dp(40),
+            row_force_default=True,
+            spacing=dp(8),
+            padding=dp(8),
+        )
         grid.add_widget(Label(text="Threads"))
         grid.add_widget(self.thread_input)
         grid.add_widget(Label(text="Timeout (s)"))
@@ -1230,14 +1303,14 @@ class DiscoveryPanel(BoxLayout):
         grid.add_widget(self.retries_input)
         self.add_widget(grid)
 
-        mode_box = BoxLayout(size_hint_y=None, height=40)
-        self.mode_spinner = Spinner(text="Lite", values=("Lite", "Full"))
+        mode_box = BoxLayout(size_hint_y=None, height=dp(52), spacing=dp(8))
+        self.mode_spinner = Spinner(text="Lite", values=("Lite", "Full"), size_hint=(None, 1), width=dp(140))
         self.mode_spinner.bind(text=self._on_mode_change)
         mode_box.add_widget(Label(text="Info Mode", size_hint=(0.6, 1)))
         mode_box.add_widget(self.mode_spinner)
         self.add_widget(mode_box)
 
-        self.btn_discover = Button(text="Discover Devices", size_hint_y=None, height=48)
+        self.btn_discover = Button(text="Discover Devices", size_hint_y=None, height=dp(60))
         self.btn_discover.bind(on_release=lambda *_: self._emit_discover())
         self.add_widget(self.btn_discover)
 
@@ -1304,9 +1377,9 @@ class RootLayout(TabbedPanel):
     def _wrap_in_scroll(self, panel: BoxLayout) -> ScrollView:
         """Wrap the provided panel in a ScrollView for small displays."""
 
-        panel.size_hint_y = None
+        panel.size_hint = (1, None)
 
-        container = BoxLayout(orientation="vertical", size_hint=(1, None), padding=8)
+        container = BoxLayout(orientation="vertical", size_hint=(1, None), padding=dp(12), spacing=dp(8))
         container.bind(minimum_height=container.setter("height"))
         container.add_widget(panel)
 
@@ -1347,12 +1420,18 @@ class RootLayout(TabbedPanel):
     # Data loading helpers
     # ------------------------------------------------------------------
     def _load_command_library(self):
-        try:
-            records = load_command_library()
-        except CommandLibraryError as exc:
-            self.logs_panel.append_line(f"[ERROR] {exc}")
-            records = []
-        self.command_panel.set_library(records)
+        def worker():
+            try:
+                records = load_command_library()
+            except CommandLibraryError as exc:
+                Clock.schedule_once(
+                    lambda dt, err=exc: self.logs_panel.append_line(f"[ERROR] {err}"),
+                    0,
+                )
+                records = []
+            Clock.schedule_once(lambda dt: self.command_panel.set_library(records), 0)
+
+        threading.Thread(target=worker, daemon=True).start()
 
     # ------------------------------------------------------------------
     # Event handlers
@@ -1362,14 +1441,46 @@ class RootLayout(TabbedPanel):
             self.logs_panel.append_line("[WARN] Discovery already running")
             return
 
-        ips = build_ip_list(params.get("ip_ranges", DEFAULT_IP_RANGES))
-        if not ips:
-            self.logs_panel.append_line("[WARN] No IP addresses to scan")
+        self.discovery_panel.set_busy(True)
+        self.logs_panel.append_line("[INFO] Preparing discovery run…")
+
+        def prepare():
+            try:
+                ip_ranges = params.get("ip_ranges", DEFAULT_IP_RANGES)
+                ips = build_ip_list(ip_ranges)
+            except Exception as exc:  # pragma: no cover - defensive for mobile builds
+                Clock.schedule_once(
+                    lambda dt, err=exc: self._handle_discovery_prep_error(err),
+                    0,
+                )
+                return
+
+            if not ips:
+                Clock.schedule_once(lambda dt: self._handle_discovery_no_ips(), 0)
+                return
+
+            Clock.schedule_once(lambda dt: self._start_discovery_with_ips(ips, params), 0)
+
+        threading.Thread(target=prepare, daemon=True).start()
+
+    def _handle_discovery_prep_error(self, exc: Exception):
+        self.discovery_panel.set_busy(False)
+        self.logs_panel.append_line(f"[ERROR] Failed to prepare discovery: {exc}")
+
+    def _handle_discovery_no_ips(self):
+        self.discovery_panel.set_busy(False)
+        self.logs_panel.append_line("[WARN] No IP addresses to scan")
+
+    def _start_discovery_with_ips(self, ips: Iterable[str], params: Dict):
+        if self.active_thread is not None and self.active_thread.is_alive():
+            self.discovery_panel.set_busy(False)
+            self.logs_panel.append_line("[WARN] Discovery already running")
             return
 
-        self.logs_panel.append_line(f"[INFO] Starting discovery of {len(ips)} IPs")
+        ip_list = ips if isinstance(ips, list) else list(ips)
+        self.logs_panel.append_line(f"[INFO] Starting discovery of {len(ip_list)} IPs")
         self._run_executor(
-            ips=ips,
+            ips=ip_list,
             threads=params.get("threads", DEFAULT_THREADS),
             timeout=params.get("timeout", DEFAULT_TIMEOUT),
             retries=params.get("retries", DEFAULT_RETRIES),
@@ -1465,7 +1576,7 @@ class RootLayout(TabbedPanel):
         self.discovery_panel.set_busy(True)
         self.command_panel.set_busy(True)
         self.ota_panel.set_busy(True)
-        ip_list = list(ips)
+        ip_list = ips if isinstance(ips, list) else list(ips)
         self.summary_panel.update_progress(0, len(ip_list))
 
         def progress_cb(done: int, total: int):
@@ -1494,11 +1605,14 @@ class RootLayout(TabbedPanel):
         )
 
         def worker():
+            result: Optional[BulkRunResult] = None
             try:
-                result = asyncio.run(executor.run_async())
+                result = executor.run()
             except Exception as exc:
-                Clock.schedule_once(lambda dt: self.logs_panel.append_line(f"[ERROR] {exc}"), 0)
-                result = None
+                Clock.schedule_once(
+                    lambda dt, err=exc: self.logs_panel.append_line(f"[ERROR] {err}"),
+                    0,
+                )
             Clock.schedule_once(lambda dt: self._on_executor_complete(result), 0)
 
         thread = threading.Thread(target=worker, daemon=True)

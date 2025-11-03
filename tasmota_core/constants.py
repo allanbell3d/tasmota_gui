@@ -1,6 +1,6 @@
 """Shared constants for the Tasmota bulk tooling stack."""
 
-APP_VERSION = "v0.1.3"
+APP_VERSION = "v0.1.4"
 
 DEFAULT_THREADS = 100
 DEFAULT_TIMEOUT = 1
