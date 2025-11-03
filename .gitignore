@@ -25,6 +25,7 @@ Thumbs.db
 build/
 dist/
 releases/
+*.exe
 *.spec
 
 # Codex patch
