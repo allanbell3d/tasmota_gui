@@ -95,3 +95,4 @@ For detailed documentation, see [AGENTS.md](AGENTS.md).
 
 
 - 2025-09-27 0.1.2a: Added Command Library Button
+- 2025-09-27 0.1.2b: Added Preliminary Command Library
