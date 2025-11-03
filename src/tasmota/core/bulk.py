@@ -14,7 +14,7 @@ from typing import Callable, Iterable, List, Optional, Sequence, Set
 
 import httpx
 
-from .constants import DEFAULT_CSV, DEFAULT_XLSX, OTA_URLS
+from constants import DEFAULT_CSV, DEFAULT_XLSX, OTA_URLS
 from .utils import safe_extract_json
 
 LogCallback = Callable[[str, str], None]
@@ -175,6 +175,36 @@ class TasmotaBulkExecutor:
         except Exception as exc:
             return (None, str(exc))
 
+    def _send_backlog_or_commands(
+        self,
+        client: httpx.Client,
+        ip: str,
+        name: str,
+        *,
+        after_upgrade: bool = False,
+    ) -> None:
+        if not self.commands:
+            return
+
+        contains_semicolon = any(";" in cmd for cmd in self.commands)
+        if contains_semicolon:
+            context = " after upgrade" if after_upgrade else ""
+            self._log(
+                ip,
+                name,
+                f"Sending commands individually{context} (semicolons detected)",
+                tag="CMD",
+            )
+            for command in self.commands:
+                self._log(ip, name, f"Command: {command}", tag="CMD")
+                self._send_cmd(client, ip, command, expect_json=False)
+            return
+
+        backlog = "; ".join(self.commands)
+        message = "Sending backlog after upgrade..." if after_upgrade else "Sending backlog..."
+        self._log(ip, name, message, tag="CMD")
+        self._send_cmd(client, ip, f"Backlog {backlog}", expect_json=False)
+
     def _collect_info_for_ip(self, client: httpx.Client, ip: str) -> DeviceResult:
         result = DeviceResult(IP=ip)
         try:
@@ -290,13 +320,14 @@ class TasmotaBulkExecutor:
                     if self.do_upgrade and ip in self.fw_ips:
                         upgraded = self._upgrade_device(client, ip, info.Hardware, info.Name)
                         if upgraded and self.send_backlog and ip in self.cmd_ips and self.commands:
-                            backlog = "; ".join(self.commands)
-                            self._log(ip, info.Name, "Sending backlog after upgrade...", tag="CMD")
-                            self._send_cmd(client, ip, f"Backlog {backlog}", expect_json=False)
+                            self._send_backlog_or_commands(
+                                client,
+                                ip,
+                                info.Name,
+                                after_upgrade=True,
+                            )
                     elif self.send_backlog and ip in self.cmd_ips and self.commands:
-                        backlog = "; ".join(self.commands)
-                        self._log(ip, info.Name, "Sending backlog...", tag="CMD")
-                        self._send_cmd(client, ip, f"Backlog {backlog}", expect_json=False)
+                        self._send_backlog_or_commands(client, ip, info.Name)
             else:
                 self._log(ip, info.Name, "No response", tag="ERROR")
             return info

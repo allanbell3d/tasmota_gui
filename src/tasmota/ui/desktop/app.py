@@ -1,6 +1,6 @@
 # ============================
 # AllanBell3D Tasmota Bulk Tool (Cross-Platform GUI)
-# Version v0.1.8
+# Version v0.1.9
 # ============================
 
 import html
@@ -9,7 +9,7 @@ import sys
 import time
 
 from PySide6.QtCore import Qt, QEvent, QObject, QThread, QTimer, Signal
-from PySide6.QtGui import QColor, QTextCharFormat, QTextCursor
+from PySide6.QtGui import QColor, QTextCharFormat, QTextCursor, QFontMetrics
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QGroupBox, QPushButton, QTextEdit, QSpinBox, QFileDialog,
@@ -24,7 +24,7 @@ from tasmota.core.commands import (
     CommandLibraryError,
     load_command_library,
 )
-from tasmota.core.constants import (
+from constants import (
     APP_TITLE_SUFFIX,
     APP_VERSION,
     DEFAULT_BACKOFF,
@@ -90,6 +90,7 @@ class MainWindow(QWidget):
 
         # Info mode (Lite / Full) big buttons spanning half width each
         mode_box = QGroupBox("Info Mode")
+        mode_box.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         mh = QHBoxLayout()
         self.btn_lite = QPushButton("Lite")
         self.btn_full = QPushButton("Full")
@@ -98,6 +99,7 @@ class MainWindow(QWidget):
         mh.addWidget(self.btn_lite, 1)
         mh.addWidget(self.btn_full, 1)
         mode_box.setLayout(mh)
+        mode_box.setFixedHeight(self._calculate_mode_box_height(mode_box))
         v.addWidget(mode_box)
 
         self.info_mode = "lite"
@@ -115,7 +117,9 @@ class MainWindow(QWidget):
         v.addLayout(ctl)
 
         v.addWidget(QLabel("IP ranges:")); self.txt_ranges = QTextEdit()
-        self.txt_ranges.setPlainText(DEFAULT_IP_RANGES); v.addWidget(self.txt_ranges)
+        self.txt_ranges.setPlainText(DEFAULT_IP_RANGES)
+        self._set_text_edit_rows(self.txt_ranges, 5)
+        v.addWidget(self.txt_ranges)
 
         cmd_header = QHBoxLayout()
         self.lbl_commands = QLabel("Commands:")
@@ -127,7 +131,9 @@ class MainWindow(QWidget):
         v.addLayout(cmd_header)
 
         self.txt_cmds = QTextEdit()
-        self.txt_cmds.setPlainText("\n".join(DEFAULT_COMMANDS)); v.addWidget(self.txt_cmds)
+        self.txt_cmds.setPlainText("\n".join(DEFAULT_COMMANDS))
+        self.txt_cmds.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        v.addWidget(self.txt_cmds, 1)
         self.txt_cmds.setContextMenuPolicy(Qt.CustomContextMenu)
         self.txt_cmds.customContextMenuRequested.connect(self.show_cmd_context_menu)
         self.txt_cmds.installEventFilter(self)
@@ -150,7 +156,9 @@ class MainWindow(QWidget):
         lf.addWidget(self.btn_log_all); lf.addWidget(self.btn_log_err); lf.addWidget(self.btn_log_ota); lf.addWidget(self.btn_log_save)
         v.addLayout(lf)
 
-        self.txt_log = QTextEdit(); self.txt_log.setReadOnly(True); v.addWidget(self.txt_log)
+        self.txt_log = QTextEdit(); self.txt_log.setReadOnly(True)
+        self.txt_log.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        v.addWidget(self.txt_log, 1)
         self.all_logs = []; self.current_log_filter = "ALL"
         self._log_colors = {
             "ERROR": QColor("red"),
@@ -197,6 +205,24 @@ class MainWindow(QWidget):
             cursor.movePosition(QTextCursor.End)
             cursor.insertText(line + "\n", fmt)
             self.txt_log.setTextCursor(cursor)
+
+    # ----- Layout helpers -----
+    @staticmethod
+    def _set_text_edit_rows(edit, rows):
+        metrics = QFontMetrics(edit.font())
+        line_height = metrics.lineSpacing()
+        margins = edit.contentsMargins()
+        frame = edit.frameWidth()
+        extra_height = margins.top() + margins.bottom() + (frame * 2)
+        edit.setFixedHeight(int(line_height * rows + extra_height))
+        edit.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+    @staticmethod
+    def _calculate_mode_box_height(widget):
+        metrics = QFontMetrics(widget.font())
+        line_height = metrics.lineSpacing()
+        # Allow room for one line of text plus padding for the buttons and frame.
+        return int(line_height * 4)
 
     def set_log_filter(self, f):
         self.current_log_filter = f

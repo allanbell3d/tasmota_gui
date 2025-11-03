@@ -11,7 +11,7 @@ from kivy.metrics import dp
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.gridlayout import GridLayout
 
-from tasmota.core.constants import (
+from constants import (
     CHECKBOX_BLACK,
     ESP_PLATFORM_COLORS,
     ESP_PLATFORM_TEXT_COLOR,

@@ -18,6 +18,16 @@ This project follows **semantic versioning**:
 
 ---
 
+## [v0.1.9] - 2025-09-30
+### Added
+- Scaffolded a `platform/mac/` directory to host future macOS packaging assets alongside the existing Android, Linux, and Windows helpers.
+
+### Changed
+- Bumped version metadata to **v0.1.9** across constants, desktop annotations, and Buildozer specs so artefacts report the latest release identifier.
+- Refreshed README release notes, verification checklist, and timeline to document the macOS workspace and the new version.
+
+---
+
 ## [v0.1.8] - 2025-09-29
 ### Added
 - **Cross-platform Kivy front-end** that mirrors the Compose prototype with tabbed discovery, command backlog, OTA planning, summary, and log views for mobile deployments. The interface keeps panels scrollable on small displays while wiring them into shared networking routines.
@@ -27,11 +37,19 @@ This project follows **semantic versioning**:
 - **Android packaging guide** describing the Buildozer workflow, requirements, and deployment commands for generating APKs directly from the Python sources.
 - **Unified entrypoint** that boots the mobile UI when running `python -m apps.mobile`, matching the Buildozer configuration used for Android builds.
 - **Repository layout** that groups shared code under `src/tasmota`, launchers under `apps/`, platform packaging in `platform/`, and bundled assets in `assets/`.
+- Mobile-friendly Kivy front-end that mirrors the desktop layout with tabbed discovery, backlog, OTA planner, summary, and log views optimised for smaller screens.
+- Command Library dialog on mobile with search, category filtering, multi-selection, and duplicate prevention so both UIs can reuse the bundled JSON command catalog.
+- OTA planning workflow that groups devices by platform, queues firmware flashes, and automatically feeds backlog commands once upgrades complete.
+- Shared `tasmota.core` package consolidating async discovery, backlog execution, OTA orchestration, and utility helpers for parity between mobile and desktop.
+- Android packaging walkthrough describing the Buildozer workflow for generating signed APKs directly from this repository.
+- Unified entry points (`python -m apps.desktop` and `python -m apps.mobile`) and streamlined repository layout that separates shared code, launchers, assets, and platform packaging assets.
+- Animated splash overlay that keeps the launch logo visible until the mobile UI is interactive, then fades out smoothly so users never see an unfinished background.
+- Logs tab refinements that remove nested scroll containers and auto-resize entries, making swipe navigation and long-line readability consistent on phones.
 
 ### Changed
 - **Bulk executor ergonomics** now expose progress/log callbacks, Lite vs Full discovery modes, command/firmware targeting lists, OTA URL fallbacks, and resilient export handling to support the richer mobile workflows while retaining desktop parity.
 - **Result filtering** ensures only successful Tasmota responses populate the mobile summary tables so follow-up actions target valid devices.
-- **Runtime defaults** such as UI titles, output directories, platform-specific thread limits, and shared color palettes now live in `tasmota.core.constants` so desktop and mobile builds stay aligned.
+- **Runtime defaults** such as UI titles, output directories, platform-specific thread limits, and shared color palettes now live in `constants` so desktop and mobile builds stay aligned.
 
 ### Fixed
 - **Splash screen overlay** now fades out only after the mobile UI finishes loading, preventing the logo from disappearing too early and ensuring the background never peeks through during boot.

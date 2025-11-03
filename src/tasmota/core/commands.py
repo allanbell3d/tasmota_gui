@@ -8,28 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, List
 
-COMMAND_LIBRARY = [
-    ("mqtthost 192.168.64.5", "Set the MQTT broker hostname."),
-    ("mqttuser villa", "Set the MQTT username."),
-    ("mqttpassword villa", "Set the MQTT password."),
-    ("FullTopic %prefix%/%topic%/", "Configure the MQTT topic template."),
-    ("TelePeriod 10", "Publish telemetry every 10 seconds."),
-    ("latitude 25.163853", "Set device latitude."),
-    ("longitude 55.219098", "Set device longitude."),
-    ("timezone +4", "Set timezone offset."),
-    ("powerretain on", "Retain power state over MQTT."),
-    ("wattres 2", "Set watt resolution to 2 decimals."),
-    ("EnergyRes 2", "Set energy resolution to 2 decimals."),
-    ("AmpRes 2", "Set ampere resolution to 2 decimals."),
-    ("switchretain off", "Disable switch retain."),
-    ("buttonretain off", "Disable button retain."),
-    ("poweronstate 3", "Restore last power state after reboot."),
-    ("SetOption56 1", "Enable instantaneous energy updates."),
-    ("SetOption57 1", "Enable cumulative energy updates."),
-    ("SetOption59 1", "Set switch mode to follow relay state."),
-    ("SetOption65 1", "Enable device LED for Wi-Fi status."),
-    ("WifiConfig 5", "Enable Wi-Fi SmartConfig and WPS."),
-]
+from constants import COMMAND_LIBRARY
 
 DEFAULT_COMMANDS = [command for command, _ in COMMAND_LIBRARY]
 

@@ -8,31 +8,16 @@ and command handling behave identically regardless of platform.
 ---
 
 ## Current Release
-- **Version:** v0.1.8
-- **Release date:** 2025-09-29
+- **Version:** v0.1.9
+- **Release date:** 2025-09-30
 - **Headline updates:**
-  - Mobile-friendly Kivy front-end that mirrors the desktop layout with tabbed
-    discovery, backlog, OTA planner, summary, and log views optimised for
-    smaller screens.
-  - Command Library dialog on mobile with search, category filtering,
-    multi-selection, and duplicate prevention so both UIs can reuse the bundled
-    JSON command catalog.
-  - OTA planning workflow that groups devices by platform, queues firmware
-    flashes, and automatically feeds backlog commands once upgrades complete.
-  - Shared `tasmota.core` package consolidating async discovery, backlog
-    execution, OTA orchestration, and utility helpers for parity between mobile
-    and desktop.
-  - Android packaging walkthrough describing the Buildozer workflow for
-    generating signed APKs directly from this repository.
-  - Unified entry points (`python -m apps.desktop` and `python -m apps.mobile`)
-    and streamlined repository layout that separates shared code, launchers,
-    assets, and platform packaging assets.
-  - Animated splash overlay that keeps the launch logo visible until the mobile
-    UI is interactive, then fades out smoothly so users never see an unfinished
-    background.
-  - Logs tab refinements that remove nested scroll containers and auto-resize
-    entries, making swipe navigation and long-line readability consistent on
-    phones.
+  - Added a `platform/mac/` workspace so forthcoming macOS packaging scripts
+    have a dedicated home alongside the Android, Linux, and Windows helpers.
+  - Documented the macOS scaffolding, refreshed release notes, and aligned the
+    verification checklist with the new version.
+  - Bumped application metadata (`constants.APP_VERSION`, Buildozer specs, and
+    desktop annotations) to **v0.1.9** so the UI and packaging artefacts report
+    the same build identifier.
 
 See the [CHANGELOG](CHANGELOG.md) for a full list of historical changes.
 
@@ -46,7 +31,7 @@ See the [CHANGELOG](CHANGELOG.md) for a full list of historical changes.
   visibility.
 - Cross-platform desktop and mobile interfaces backed by the same async engine.
 - Configurable runtime defaults (thread limits, timeouts, output directory,
-  branding) via `tasmota.core.constants`.
+  branding) via `constants`.
 
 ---
 
@@ -66,6 +51,7 @@ platform/
   android/   # Buildozer spec + docs for APK generation
   windows/   # PyInstaller scripts/specs
   linux/     # AppImage/Debian packaging notes
+  mac/       # Reserved for future macOS packaging workflows
 ```
 
 Shared source is organised beneath `src/tasmota/` while thin launchers live in
@@ -106,7 +92,7 @@ The project adopts an agent-oriented architecture with clear responsibilities:
 
 ## Release Verification Checklist
 
-To ship v0.1.8 we walked through the following end-to-end debugging steps. Run
+To ship v0.1.9 we walked through the following end-to-end debugging steps. Run
 them again before cutting a future release to make sure the desktop and mobile
 experiences stay in sync:
 
@@ -127,10 +113,15 @@ experiences stay in sync:
      `python -m apps.mobile`
    - Ensure both entry points can import `tasmota.core`, render the tabbed UI,
      and complete a mock OTA planning session without raising exceptions.
+4. **macOS packaging placeholder**
+   - Confirm the `platform/mac/` directory is present to host forthcoming
+     packaging scripts. (No build steps yet.)
 
 ---
 
 ## Release Timeline
+- **2025-09-30 – v0.1.9**: Reserved macOS packaging workspace, refreshed the
+  release documentation, and aligned all metadata with the new version number.
 - **2025-09-29 – v0.1.8**: Introduced the mobile Kivy interface, OTA planner,
   command library parity, shared core package, repository reorganisation,
   Android packaging guidance, an animated splash overlay that waits for the UI

@@ -14,7 +14,7 @@ from kivy.uix.tabbedpanel import TabbedPanel, TabbedPanelItem
 
 from tasmota.core.bulk import BulkRunResult, TasmotaBulkExecutor
 from tasmota.core.commands import CommandLibraryError, load_command_library
-from tasmota.core.constants import (
+from constants import (
     DEFAULT_BACKOFF,
     DEFAULT_IP_RANGES,
     DEFAULT_RETRIES,

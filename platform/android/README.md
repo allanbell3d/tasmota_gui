@@ -37,7 +37,7 @@ This project ships a Kivy entrypoint (`apps/mobile.py`) that mirrors the Compose
    buildozer android debug
    ```
    The first build downloads the Android SDK/NDK and all Python wheels, so it can take several minutes.
-3. The resulting debug APK is located in `bin/` (e.g., `bin/tasmotabulk-0.1.8-debug.apk`).
+3. The resulting debug APK is located in `bin/` (e.g., `bin/tasmotabulk-0.1.9-debug.apk`).
 
 ## Install on a Device or Emulator
 
@@ -61,7 +61,7 @@ buildozer android logcat
 
 ## Runtime defaults on Android
 
-* Discovery now defaults to **20 worker threads** on Android (clamped to a maximum of 32) via the shared `tasmota.core.constants.ANDROID_THREAD_DEFAULT` and `ANDROID_THREAD_MAX` values, reducing CPU contention on phones and tablets.
+* Discovery now defaults to **20 worker threads** on Android (clamped to a maximum of 32) via the shared `constants.ANDROID_THREAD_DEFAULT` and `ANDROID_THREAD_MAX` values, reducing CPU contention on phones and tablets.
 * Command and OTA runs reuse the same Android-specific limits so scans stay responsive while you browse other tabs.
 
 ## Troubleshooting

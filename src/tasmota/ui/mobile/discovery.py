@@ -15,7 +15,7 @@ from kivy.uix.spinner import Spinner
 from kivy.uix.textinput import TextInput
 from kivy.utils import platform
 
-from tasmota.core.constants import (
+from constants import (
     ANDROID_THREAD_DEFAULT,
     ANDROID_THREAD_MAX,
     DEFAULT_IP_RANGES,

@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from tasmota.core.constants import OTA_URLS
+from constants import OTA_URLS
 
 
 class SelectionWindow(QDialog):

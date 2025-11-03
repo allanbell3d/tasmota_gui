@@ -17,7 +17,7 @@ from kivy.uix.scrollview import ScrollView
 from kivy.uix.spinner import Spinner
 from kivy.uix.textinput import TextInput
 
-from tasmota.core.constants import OTA_URLS
+from constants import OTA_URLS
 
 from .widgets.common import (
     CHECKBOX_BLACK,
