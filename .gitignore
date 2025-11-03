@@ -27,7 +27,7 @@ Thumbs.db
 # PyInstaller build artifacts
 build/
 dist/
-*.spec
+
 # Ignore release builds and executables
 releases/
 *.exe

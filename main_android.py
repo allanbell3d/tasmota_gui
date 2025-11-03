@@ -1,5 +1,4 @@
-"""Shim entrypoint retained for legacy Android builds."""
-
+"""Android entry point delegating to the Kivy mobile launcher."""
 from apps.mobile import main
 
 
