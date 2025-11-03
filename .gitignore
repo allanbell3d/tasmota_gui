@@ -21,7 +21,7 @@ Thumbs.db
 *.xlsx
 *.csv
 *.rej
-*.md
+AGENTS.md
 *.diff
 
 # PyInstaller build artifacts
