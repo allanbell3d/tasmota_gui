@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.env
+.venv
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build / logs / outputs
+*.log
+*.xlsx
+*.csv
+
+# PyInstaller build artifacts
+build/
+dist/
+*.spec
+
+# Codex patch
+*.diff
+
+# Tools and notes
+*.txt
+*.bat
+*.ps1
+Crap/
