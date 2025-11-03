@@ -9,13 +9,16 @@ This project follows **semantic versioning**:
 ---
 
 ## [Unreleased]
-### Documentation
-- Recorded the Android/Windows packaging and run-time debugging steps used to
-  validate v0.1.7 in the README release verification checklist.
+### Changed
+- Command staging now reports partial successes by tracking sanitized versus deduplicated targets in the mobile command library, ensuring duplicate or invalid selections surface warnings.
+- OTA target staging uses constant-time lookups for device rows, reducing queue updates on large inventories.
+
+### Removed
+- Dead `clear_staged_targets` helper was dropped from the command library panel.
 
 ---
 
-## [v0.1.7] - 2025-09-29
+## [v0.1.8] - 2025-09-29
 ### Added
 - **Cross-platform Kivy front-end** that mirrors the Compose prototype with tabbed discovery, command backlog, OTA planning, summary, and log views for mobile deployments. The interface keeps panels scrollable on small displays while wiring them into shared networking routines.
 - **Command Library popup** for mobile with search, category filters, multi-select checkboxes, and backlog de-duplication so operators can reuse the same curated JSON dataset across desktop and Android builds.
@@ -29,6 +32,13 @@ This project follows **semantic versioning**:
 - **Bulk executor ergonomics** now expose progress/log callbacks, Lite vs Full discovery modes, command/firmware targeting lists, OTA URL fallbacks, and resilient export handling to support the richer mobile workflows while retaining desktop parity.
 - **Result filtering** ensures only successful Tasmota responses populate the mobile summary tables so follow-up actions target valid devices.
 - **Runtime defaults** such as UI titles, output directories, platform-specific thread limits, and shared color palettes now live in `tasmota.core.constants` so desktop and mobile builds stay aligned.
+
+### Fixed
+- **Splash screen overlay** now fades out only after the mobile UI finishes loading, preventing the logo from disappearing too early and ensuring the background never peeks through during boot.
+- **Log panel scrolling** keeps touch interactions predictable by avoiding nested scroll views and resizing rendered log lines to match the viewport.
+
+### Documentation
+- Recorded the Android/Windows packaging and run-time debugging steps used to validate v0.1.8 in the README release verification checklist.
 
 ---
 

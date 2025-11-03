@@ -118,6 +118,7 @@ class OTAPanel(BoxLayout):
         self.results = []
         self.rows: List[OTARow] = []
         self.row_map: Dict[str, OTARow] = {}
+        self._rows_by_ip: Dict[str, OTARow] = {}
         self.queue: Dict[str, Set[str]] = {"ESP8266": set(), "ESP32": set()}
 
         self.add_widget(Label(text="OTA Updates", size_hint_y=None, height=dp(36)))
@@ -279,6 +280,7 @@ class OTAPanel(BoxLayout):
         self.results = filtered
         existing = self.row_map
         new_map: Dict[str, OTARow] = {}
+        ip_map: Dict[str, OTARow] = {}
         for device in self.results:
             key = self._device_key(device)
             row = existing.get(key)
@@ -287,13 +289,17 @@ class OTAPanel(BoxLayout):
             else:
                 row.update_device(device)
             new_map[key] = row
+            ip = getattr(device, "IP", None)
+            if ip:
+                ip_map[str(ip)] = row
         self.row_map = new_map
+        self._rows_by_ip = ip_map
         self.rows = list(self.row_map.values())
         self._schedule_rebuild()
         self._update_queue_status()
 
     def stage_ota_targets(self, ips: Iterable[str]) -> Dict[str, int]:
-        sanitized = [str(ip).strip() for ip in ips if ip]
+        sanitized = [str(ip).strip() for ip in ips if ip and str(ip).strip()]
         seen: Set[str] = set()
         platform_counts: Dict[str, int] = {}
         staged = 0
@@ -340,10 +346,7 @@ class OTAPanel(BoxLayout):
     # Internal helpers
     # ------------------------------------------------------------------
     def _row_for_ip(self, ip: str) -> Optional[OTARow]:
-        for row in self.row_map.values():
-            if row.device.IP == ip:
-                return row
-        return None
+        return self._rows_by_ip.get(str(ip))
 
     def _goto_commands(self):
         if self.goto_commands_callback:
@@ -388,7 +391,9 @@ class OTAPanel(BoxLayout):
         if not selected_rows:
             return
         for row in selected_rows:
-            ip = row.device.IP
+            ip = str(row.device.IP or "").strip()
+            if not ip:
+                continue
             for other in self.queue.values():
                 other.discard(ip)
             if platform in self.queue:
@@ -402,7 +407,7 @@ class OTAPanel(BoxLayout):
         self._update_queue_status()
 
     def _update_queue_status(self):
-        valid_ips = {row.device.IP for row in self.row_map.values()}
+        valid_ips = set(self._rows_by_ip.keys())
         for key in self.queue:
             self.queue[key] = {ip for ip in self.queue[key] if ip in valid_ips}
         queued_total = sum(len(ips) for ips in self.queue.values())
@@ -410,7 +415,7 @@ class OTAPanel(BoxLayout):
         for row in self.row_map.values():
             platform = None
             for key, ips in self.queue.items():
-                if row.device.IP in ips:
+                if str(row.device.IP or "").strip() in ips:
                     platform = key
                     break
             row.set_queued(platform)

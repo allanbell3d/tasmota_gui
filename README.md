@@ -8,7 +8,7 @@ and command handling behave identically regardless of platform.
 ---
 
 ## Current Release
-- **Version:** v0.1.7
+- **Version:** v0.1.8
 - **Release date:** 2025-09-29
 - **Headline updates:**
   - Mobile-friendly Kivy front-end that mirrors the desktop layout with tabbed
@@ -27,6 +27,12 @@ and command handling behave identically regardless of platform.
   - Unified entry points (`python -m apps.desktop` and `python -m apps.mobile`)
     and streamlined repository layout that separates shared code, launchers,
     assets, and platform packaging assets.
+  - Animated splash overlay that keeps the launch logo visible until the mobile
+    UI is interactive, then fades out smoothly so users never see an unfinished
+    background.
+  - Logs tab refinements that remove nested scroll containers and auto-resize
+    entries, making swipe navigation and long-line readability consistent on
+    phones.
 
 See the [CHANGELOG](CHANGELOG.md) for a full list of historical changes.
 
@@ -100,7 +106,7 @@ The project adopts an agent-oriented architecture with clear responsibilities:
 
 ## Release Verification Checklist
 
-To ship v0.1.7 we walked through the following end-to-end debugging steps. Run
+To ship v0.1.8 we walked through the following end-to-end debugging steps. Run
 them again before cutting a future release to make sure the desktop and mobile
 experiences stay in sync:
 
@@ -125,9 +131,10 @@ experiences stay in sync:
 ---
 
 ## Release Timeline
-- **2025-09-29 – v0.1.7**: Introduced the mobile Kivy interface, OTA planner,
-  command library parity, shared core package, repository reorganisation, and
-  Android packaging guidance.
+- **2025-09-29 – v0.1.8**: Introduced the mobile Kivy interface, OTA planner,
+  command library parity, shared core package, repository reorganisation,
+  Android packaging guidance, an animated splash overlay that waits for the UI
+  to be ready, and log panel refinements for smoother scrolling.
 - **2025-09-28 – v0.1.6**: Tuned Android discovery thread defaults, kept inactive
   tabs responsive during long-running tasks, and documented concurrency tweaks.
 - **2025-09-27 – v0.1.5**: Stabilised discovery workers and normalised version

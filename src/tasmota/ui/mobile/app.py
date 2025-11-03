@@ -5,13 +5,10 @@ from __future__ import annotations
 import threading
 from typing import Callable, Dict, Iterable, List, Optional, Tuple
 
-from kivy.animation import Animation
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.metrics import dp
 from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.floatlayout import FloatLayout
-from kivy.uix.image import Image
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.tabbedpanel import TabbedPanel, TabbedPanelItem
 
@@ -27,60 +24,12 @@ from tasmota.core.constants import (
 )
 from tasmota.core.utils import build_ip_list
 
+from .boot import BootSequence
 from .command_library import CommandLibraryPanel
 from .discovery import DiscoveryPanel
 from .log_panel import LogPanel
 from .ota import OTAPanel
 from .summary import SummaryPanel
-
-
-class StaticLogoSplash(FloatLayout):
-    """Lightweight overlay that shows the static launch logo."""
-
-    __events__ = ("on_dismiss",)
-
-    def __init__(self, *, duration: Optional[float] = 10, **kwargs):
-        super().__init__(**kwargs)
-        self.size_hint = (1, 1)
-        self.pos_hint = {"x": 0, "y": 0}
-        self._dismissed = False
-        self._dismiss_event = None
-        if duration is not None:
-            self._dismiss_event = Clock.schedule_once(lambda dt: self.dismiss(), duration)
-
-        logo = Image(
-            source="assets/images/logo.png",
-            allow_stretch=True,
-            keep_ratio=False,
-            size_hint=(1, 1),
-            pos_hint={"x": 0, "y": 0},
-        )
-        self.add_widget(logo)
-
-    def dismiss(self, *_):
-        if self._dismissed:
-            return
-        self._dismissed = True
-        if self._dismiss_event is not None and not getattr(self._dismiss_event, "is_triggered", False):
-            self._dismiss_event.cancel()
-        self._dismiss_event = None
-        parent = self.parent
-        if parent is None:
-            self.dispatch("on_dismiss")
-            return
-
-        Animation.cancel_all(self)
-
-        def _finish(*_):
-            if self.parent is not None:
-                self.parent.remove_widget(self)
-            self.opacity = 1
-            self.dispatch("on_dismiss")
-
-        Animation(opacity=0, duration=10).bind(on_complete=_finish).start(self)
-
-    def on_dismiss(self, *_):  # pragma: no cover - dispatched event hook
-        pass
 
 
 class RootLayout(TabbedPanel):
@@ -589,31 +538,14 @@ class RootLayout(TabbedPanel):
 class TasmotaKivyApp(App):
     """Application wrapper."""
 
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._boot_sequence = BootSequence()
+
     def build(self):
         self.title = "Tasmota Bulk Tool"
-        self.root_layout = RootLayout(ready_callback=self._dismiss_splash)
-        container = FloatLayout(size_hint=(1, 1))
-
-        self._splash = StaticLogoSplash(duration=None)
-        self._splash.bind(on_dismiss=lambda *_: self._clear_splash())
-
-        container.add_widget(self._splash)
-        container.add_widget(self.root_layout, index=0)
-        self._splash_timeout = Clock.schedule_once(lambda *_: self._dismiss_splash(), 30)
-        return container
-
-    def _dismiss_splash(self, *_):
-        splash = getattr(self, "_splash", None)
-        if splash is not None:
-            splash.dismiss()
-
-    def _clear_splash(self):
-        if hasattr(self, "_splash"):
-            self._splash = None
-        timeout = getattr(self, "_splash_timeout", None)
-        if timeout is not None and not getattr(timeout, "is_triggered", False):
-            timeout.cancel()
-        self._splash_timeout = None
+        self.root_layout = RootLayout(ready_callback=self._boot_sequence.reveal)
+        return self._boot_sequence.attach(self.root_layout)
 
 
 def main():

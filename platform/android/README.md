@@ -37,7 +37,7 @@ This project ships a Kivy entrypoint (`apps/mobile.py`) that mirrors the Compose
    buildozer android debug
    ```
    The first build downloads the Android SDK/NDK and all Python wheels, so it can take several minutes.
-3. The resulting debug APK is located in `bin/` (e.g., `bin/tasmotabulk-0.1.7-debug.apk`).
+3. The resulting debug APK is located in `bin/` (e.g., `bin/tasmotabulk-0.1.8-debug.apk`).
 
 ## Install on a Device or Emulator
 

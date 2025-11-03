@@ -256,17 +256,14 @@ class CommandLibraryPanel(BoxLayout):
         self._refresh_library_rows()
 
     def stage_command_targets(self, ips: Iterable[str]) -> Dict[str, int]:
-        unique = sorted({str(ip).strip() for ip in ips if ip})
+        sanitized = [str(ip).strip() for ip in ips if ip and str(ip).strip()]
+        unique = sorted(set(sanitized))
         self._staged_ips = unique
         self._refresh_staged_targets()
-        return {"staged": len(unique), "total": len(unique)}
+        return {"staged": len(unique), "total": len(sanitized)}
 
     def get_staged_ips(self) -> List[str]:
         return list(self._staged_ips)
-
-    def clear_staged_targets(self):
-        self._staged_ips = []
-        self._refresh_staged_targets()
 
     def _refresh_staged_targets(self):
         count = len(self._staged_ips)
