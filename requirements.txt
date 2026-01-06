@@ -1,0 +1,43 @@
+# =============================================================================
+# Tasmota GUI - Python Dependencies
+# =============================================================================
+# This file lists all Python packages required to run the application.
+#
+# INSTALLATION:
+#   pip install -r requirements.txt
+#
+# NOTE: This app has two UI variants. Install dependencies based on your target:
+#   - Desktop (Windows/Linux/Mac): Uncomment PySide6
+#   - Mobile (Android): Uncomment Kivy (handled by buildozer for Android builds)
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Core Dependencies (Required for all platforms)
+# -----------------------------------------------------------------------------
+
+# HTTP client for communicating with Tasmota devices
+# Used for discovery, sending commands, and OTA updates
+httpx>=0.24.0
+
+# Data manipulation and export functionality
+# Used for generating Excel/CSV reports of device data
+pandas>=2.0.0
+
+# Excel file support for pandas
+# Required for exporting to .xlsx format
+openpyxl>=3.1.0
+
+# -----------------------------------------------------------------------------
+# Desktop UI (PySide6 / Qt for Python)
+# -----------------------------------------------------------------------------
+# Uncomment for desktop builds (Windows, Linux, macOS)
+
+# PySide6>=6.5.0
+
+# -----------------------------------------------------------------------------
+# Mobile UI (Kivy)
+# -----------------------------------------------------------------------------
+# Uncomment for local Kivy development/testing
+# Note: For Android builds, dependencies are managed by buildozer.spec
+
+# kivy>=2.2.0
