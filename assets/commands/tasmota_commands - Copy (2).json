@@ -1,0 +1,1154 @@
+[
+  {
+    "Command": "Backlog",
+    "Value": "",
+    "Description": "Execute up to 30 consecutive commands in sequence, each separated by semicolon\n\nSyntax: Backlog <command1>; <command2>; <command3>...\n\nAllowed values/notes: <commands>\n\nUseful for device setup to avoid multiple restarts. Can be cleared by issuing Backlog without arguments.\n\nDocumentation: [Backlog](https://tasmota.github.io/docs/Commands/#backlog)",
+    "category": "Control"
+  },
+  {
+    "Command": "Backlog0",
+    "Value": "",
+    "Description": "Execute commands sequentially without delay between them\n\nSyntax: Backlog0 <command1>; <command2>...\n\nAllowed values/notes: <commands>\n\nDocumentation: [Backlog0](https://tasmota.github.io/docs/Commands/#backlog0)",
+    "category": "Control"
+  },
+  {
+    "Command": "Backlog2",
+    "Value": "",
+    "Description": "Execute commands without publishing results via MQTT or logging\n\nSyntax: Backlog2 <command1>; <command2>...\n\nAllowed values/notes: <commands>\n\nDocumentation: [Backlog2](https://tasmota.github.io/docs/Commands/#backlog2)",
+    "category": "Control"
+  },
+  {
+    "Command": "Backlog3",
+    "Value": "",
+    "Description": "Execute commands like Backlog but suppress result output\n\nSyntax: Backlog3 <command1>; <command2>...\n\nAllowed values/notes: <commands>\n\nDocumentation: [Backlog3](https://tasmota.github.io/docs/Commands/#backlog3)",
+    "category": "Control"
+  },
+  {
+    "Command": "BlinkCount",
+    "Value": "10",
+    "Description": "Set number of relay toggles (blinks)\n\nSyntax: BlinkCount <value>\n\nAllowed values/notes: 0, 1..32000\n\nDoes not control status LED\n\nDocumentation: [BlinkCount](https://tasmota.github.io/docs/Commands/#blinkcount)",
+    "category": "Control"
+  },
+  {
+    "Command": "BlinkTime",
+    "Value": "",
+    "Description": "Set duration for power toggling during blink sequence\n\nSyntax: BlinkTime <value>\n\nAllowed values/notes: 2..3600\n\nDocumentation: [BlinkTime](https://tasmota.github.io/docs/Commands/#blinktime)",
+    "category": "Control"
+  },
+  {
+    "Command": "ButtonDebounce",
+    "Value": "50",
+    "Description": "Control button debounce timing\n\nSyntax: ButtonDebounce <value>\n\nAllowed values/notes: 40..1000\n\nDocumentation: [ButtonDebounce](https://tasmota.github.io/docs/Commands/#buttondebounce)",
+    "category": "Control"
+  },
+  {
+    "Command": "Buzzer",
+    "Value": "",
+    "Description": "Control buzzer output with various patterns\n\nSyntax: Buzzer <count>,<beep>[,<silence>[,<tune>]]\n\nAllowed values/notes: <count>, <beep>, <silence>, <tune>, -1, -2\n\nDocumentation: [Buzzer](https://tasmota.github.io/docs/Commands/#buzzer)",
+    "category": "Control"
+  },
+  {
+    "Command": "FanSpeed",
+    "Value": "",
+    "Description": "Control fan speed (iFan02/iFan03)\n\nSyntax: FanSpeed <speed>\n\nAllowed values/notes: 0, 1..3, +, -\n\nDocumentation: [FanSpeed](https://tasmota.github.io/docs/Commands/#fanspeed)",
+    "category": "Control"
+  },
+  {
+    "Command": "Interlock",
+    "Value": "0",
+    "Description": "Set relay interlock mode and grouping\n\nSyntax: Interlock <mode> [<group1> <group2>...]\n\nAllowed values/notes: 0, 1\n\nGroups separated by space; relays within group separated by comma\n\nDocumentation: [Interlock](https://tasmota.github.io/docs/Commands/#interlock)",
+    "category": "Control"
+  },
+  {
+    "Command": "LedPower",
+    "Value": "",
+    "Description": "Control main LED power state\n\nSyntax: LedPower <state>\n\nAllowed values/notes: 0, 1, 2\n\nDocumentation: [LedPower](https://tasmota.github.io/docs/Commands/#ledpower)",
+    "category": "Control"
+  },
+  {
+    "Command": "LedState",
+    "Value": "1",
+    "Description": "Configure LED indicator behavior\n\nSyntax: LedState <mode>\n\nAllowed values/notes: 0, 1, 2, 3, 4, 5, 6, 7, 8\n\nDocumentation: [LedState](https://tasmota.github.io/docs/Commands/#ledstate)",
+    "category": "Control"
+  },
+  {
+    "Command": "NoDelay",
+    "Value": "",
+    "Description": "Skip inter-command delay for next Backlog command\n\nSyntax: NoDelay\n\nUse cautiously; best for simple commands\n\nDocumentation: [NoDelay](https://tasmota.github.io/docs/Commands/#nodelay)",
+    "category": "Control"
+  },
+  {
+    "Command": "Power",
+    "Value": "",
+    "Description": "Control individual power output state\n\nSyntax: Power<x> <state>\n\nAllowed values/notes: 0 / off / false, 1 / on / true, 2 / toggle, 3 / blink, 4 / blinkoff\n\nAlso restarts PulseTime timer\n\nDocumentation: [Power](https://tasmota.github.io/docs/Commands/#power)",
+    "category": "Control"
+  },
+  {
+    "Command": "Power0",
+    "Value": "",
+    "Description": "Control all power outputs simultaneously\n\nSyntax: Power0 <state>\n\nAllowed values/notes: 0 / off, 1 / on, 2 / toggle\n\nDocumentation: [Power0](https://tasmota.github.io/docs/Commands/#power0)",
+    "category": "Control"
+  },
+  {
+    "Command": "PowerLock",
+    "Value": "0",
+    "Description": "Lock power state to prevent further changes\n\nSyntax: PowerLock<x> <state>\n\nAllowed values/notes: 0, 1\n\nOnly PowerOnState and Interlock can change locked devices\n\nDocumentation: [PowerLock](https://tasmota.github.io/docs/Commands/#powerlock)",
+    "category": "Control"
+  },
+  {
+    "Command": "PowerOnState",
+    "Value": "3",
+    "Description": "Define power state when device powers up\n\nSyntax: PowerOnState <value>\n\nAllowed values/notes: 0 / OFF, 1 / ON, 2 / TOGGLE, 3, 4, 5\n\nDocumentation: [PowerOnState](https://tasmota.github.io/docs/Commands/#poweronstate)",
+    "category": "Control"
+  },
+  {
+    "Command": "PulseTime",
+    "Value": "0",
+    "Description": "Auto-off timer for relay\n\nSyntax: PulseTime<x> <value>\n\nAllowed values/notes: 0 / OFF, 1..111, 112..64900\n\nAfter timeout, power automatically turns OFF\n\nDocumentation: [PulseTime](https://tasmota.github.io/docs/Commands/#pulsetime)",
+    "category": "Control"
+  },
+  {
+    "Command": "SwitchDebounce",
+    "Value": "50",
+    "Description": "Control switch debounce timing and method\n\nSyntax: SwitchDebounce <value>\n\nAllowed values/notes: 40..1000\n\nDocumentation: [SwitchDebounce](https://tasmota.github.io/docs/Commands/#switchdebounce)",
+    "category": "Control"
+  },
+  {
+    "Command": "SwitchMode",
+    "Value": "0",
+    "Description": "Define switch behavior\n\nSyntax: SwitchMode<x> <mode>\n\nAllowed values/notes: 0..16\n\nIndex 0 applies to all switches\n\nDocumentation: [SwitchMode](https://tasmota.github.io/docs/Commands/#switchmode)",
+    "category": "Control"
+  },
+  {
+    "Command": "TimedPower",
+    "Value": "",
+    "Description": "Turn power on/off with automatic reversal after timeout\n\nSyntax: TimedPower<x> <state> <milliseconds>\n\nAllowed values/notes: <state>, <value>\n\nIssue TimedPower<x> without parameters to show remaining timers\n\nDocumentation: [TimedPower](https://tasmota.github.io/docs/Commands/#timedpower)",
+    "category": "Control"
+  },
+  {
+    "Command": "Delay",
+    "Value": "200",
+    "Description": "Sets a pause between consecutive backlog commands\n\nSyntax: Delay <value>\n\nAllowed values/notes: 2..3600, -1, 1\n\nNot recommended for precision timing\n\nDocumentation: [Delay](https://tasmota.github.io/docs/Commands/#delay)",
+    "category": "Management"
+  },
+  {
+    "Command": "DeepSleepTime",
+    "Value": "0",
+    "Description": "Controls device entry into deep sleep mode\n\nSyntax: DeepSleepTime <value>\n\nAllowed values/notes: 0, 11..86400\n\nDocumentation: [DeepSleepTime](https://tasmota.github.io/docs/Commands/#deepsleeptime)",
+    "category": "Management"
+  },
+  {
+    "Command": "DeviceName",
+    "Value": "FriendlyName1 value",
+    "Description": "Sets the device name displayed in webUI and used for Home Assistant autodiscovery\n\nSyntax: DeviceName <value>\n\nAllowed values/notes: <value>\n\nDocumentation: [DeviceName](https://tasmota.github.io/docs/Commands/#devicename)",
+    "category": "Management"
+  },
+  {
+    "Command": "Emulation",
+    "Value": "0",
+    "Description": "Enables emulation protocols for smart home integration\n\nSyntax: Emulation <mode>\n\nAllowed values/notes: 0, 1, 2\n\nDocumentation: [Emulation](https://tasmota.github.io/docs/Commands/#emulation)",
+    "category": "Management"
+  },
+  {
+    "Command": "FileLog",
+    "Value": "0",
+    "Description": "Enables logging to filesystem with rotating log files\n\nSyntax: FileLog <level>\n\nAllowed values/notes: 0, 1, 2, 3, 4, 10, 11..14\n\nDocumentation: [FileLog](https://tasmota.github.io/docs/Commands/#filelog)",
+    "category": "Management"
+  },
+  {
+    "Command": "FriendlyName",
+    "Value": "Firmware default",
+    "Description": "Sets a friendly name for the device\n\nSyntax: FriendlyName<x> <value>\n\nAllowed values/notes: 1, <value>\n\nDocumentation: [FriendlyName](https://tasmota.github.io/docs/Commands/#friendlyname)",
+    "category": "Management"
+  },
+  {
+    "Command": "GPIO",
+    "Value": "Module-dependent",
+    "Description": "Shows current GPIO component assignments or assigns components\n\nSyntax: GPIO<x> [<component>]\n\nAllowed values/notes: (no parameter), 255 / All, <component>\n\nDocumentation: [GPIO](https://tasmota.github.io/docs/Commands/#gpio)",
+    "category": "Management"
+  },
+  {
+    "Command": "GPIOs",
+    "Value": "",
+    "Description": "Lists available components by name and index\n\nSyntax: GPIOs [option]\n\nAllowed values/notes: (no parameter), 255 / All\n\nUsed for viewing GPIO component options before assignment\n\nDocumentation: [GPIOs](https://tasmota.github.io/docs/Commands/#gpios)",
+    "category": "Management"
+  },
+  {
+    "Command": "I2CDriver",
+    "Value": "",
+    "Description": "Enables or disables individual I2C sensor drivers\n\nSyntax: I2CDriver <setting>\n\nAllowed values/notes: <setting>\n\nRead more in I2CDEVICES documentation\n\nDocumentation: [I2CDriver](https://tasmota.github.io/docs/Commands/#i2cdriver)",
+    "category": "Management"
+  },
+  {
+    "Command": "I2CScan",
+    "Value": "",
+    "Description": "Scans I2C bus and displays found device addresses\n\nSyntax: I2CScan\n\nAllowed values/notes: I2CScan, I2CScan0\n\nESP32 supports scanning both I2C buses\n\nDocumentation: [I2CScan](https://tasmota.github.io/docs/Commands/#i2cscan)",
+    "category": "Management"
+  },
+  {
+    "Command": "LogHost",
+    "Value": "SYS_LOG_HOST",
+    "Description": "Configures syslog host for remote logging\n\nSyntax: LogHost <value>\n\nAllowed values/notes: 1, <value>\n\nDocumentation: [LogHost](https://tasmota.github.io/docs/Commands/#loghost)",
+    "category": "Management"
+  },
+  {
+    "Command": "LogPort",
+    "Value": "SYS_LOG_PORT",
+    "Description": "Sets the syslog server port\n\nSyntax: LogPort <value>\n\nAllowed values/notes: 1, 2..32766\n\nDocumentation: [LogPort](https://tasmota.github.io/docs/Commands/#logport)",
+    "category": "Management"
+  },
+  {
+    "Command": "Module",
+    "Value": "Current module",
+    "Description": "Displays or switches the device module configuration\n\nSyntax: Module [<value>]\n\nAllowed values/notes: (no parameter), <value>, 0\n\nDocumentation: [Module](https://tasmota.github.io/docs/Commands/#module)",
+    "category": "Management"
+  },
+  {
+    "Command": "Modules",
+    "Value": "",
+    "Description": "Lists available modules\n\nSyntax: Modules\n\nDocumentation: [Modules](https://tasmota.github.io/docs/Commands/#modules)",
+    "category": "Management"
+  },
+  {
+    "Command": "MqttLog",
+    "Value": "0",
+    "Description": "Controls MQTT logging verbosity\n\nSyntax: MqttLog <level>\n\nAllowed values/notes: 0, 1, 2, 3, 4\n\nDocumentation: [MqttLog](https://tasmota.github.io/docs/Commands/#mqttlog)",
+    "category": "Management"
+  },
+  {
+    "Command": "NtpServer",
+    "Value": "Firmware defaults",
+    "Description": "Configures NTP servers for time synchronization\n\nSyntax: NtpServer<x> <value>\n\nAllowed values/notes: 0, 1, <value>\n\nx = 1..3 (up to 3 NTP servers)\n\nDocumentation: [NtpServer](https://tasmota.github.io/docs/Commands/#ntpserver)",
+    "category": "Management"
+  },
+  {
+    "Command": "OtaUrl",
+    "Value": "Firmware default",
+    "Description": "Sets the firmware Over-The-Air update URL\n\nSyntax: OtaUrl [<value>]\n\nAllowed values/notes: (no parameter), 1, <url>\n\nDocumentation: [OtaUrl](https://tasmota.github.io/docs/Commands/#otaurl)",
+    "category": "Management"
+  },
+  {
+    "Command": "PWM",
+    "Value": "",
+    "Description": "Sets PWM output value for specific channel\n\nSyntax: PWM<x> <value>\n\nAllowed values/notes: 0..1023\n\nSee SetOption15 for PWM control behavior\n\nDocumentation: [PWM](https://tasmota.github.io/docs/Commands/#pwm)",
+    "category": "Management"
+  },
+  {
+    "Command": "PWMFrequency",
+    "Value": "977",
+    "Description": "Adjusts PWM output frequency\n\nSyntax: PWMFrequency [<frequency> [, <channel>]]\n\nAllowed values/notes: 1, 40..4000, 2..50000\n\nDefault 977Hz since v8.3.0+\n\nDocumentation: [PWMFrequency](https://tasmota.github.io/docs/Commands/#pwmfrequency)",
+    "category": "Management"
+  },
+  {
+    "Command": "PWMRange",
+    "Value": "1023",
+    "Description": "Sets maximum PWM range value\n\nSyntax: PWMRange [<value>]\n\nAllowed values/notes: 1, 255..1023\n\nDocumentation: [PWMRange](https://tasmota.github.io/docs/Commands/#pwmrange)",
+    "category": "Management"
+  },
+  {
+    "Command": "Reset",
+    "Value": "",
+    "Description": "Resets device settings and/or erases flash memory\n\nSyntax: Reset <option>\n\nAllowed values/notes: 1, 2, 3, 4, 5, 6, 99\n\nErase of flash can take a few seconds with no output\n\nDocumentation: [Reset](https://tasmota.github.io/docs/Commands/#reset)",
+    "category": "Management"
+  },
+  {
+    "Command": "Restart",
+    "Value": "1",
+    "Description": "Restarts the device with various options\n\nSyntax: Restart [<option>]\n\nAllowed values/notes: 1, 2, 3, 9, 99\n\nDocumentation: [Restart](https://tasmota.github.io/docs/Commands/#restart)",
+    "category": "Management"
+  },
+  {
+    "Command": "SaveData",
+    "Value": "1",
+    "Description": "Controls when parameter changes are saved to flash\n\nSyntax: SaveData <mode>\n\nAllowed values/notes: 0, 1, 2..3600\n\nDocumentation: [SaveData](https://tasmota.github.io/docs/Commands/#savedata)",
+    "category": "Management"
+  },
+  {
+    "Command": "SerialLog",
+    "Value": "2",
+    "Description": "Controls hardware serial port logging\n\nSyntax: SerialLog <level>\n\nAllowed values/notes: 0, 1, 2, 3, 4\n\nAuto-disables 10 minutes after reboot\n\nDocumentation: [SerialLog](https://tasmota.github.io/docs/Commands/#seriallog)",
+    "category": "Management"
+  },
+  {
+    "Command": "Sleep",
+    "Value": "50",
+    "Description": "Controls CPU sleep duration for energy saving\n\nSyntax: Sleep <milliseconds>\n\nAllowed values/notes: 0, 1..250\n\nPart of energy saving feature\n\nDocumentation: [Sleep](https://tasmota.github.io/docs/Commands/#sleep)",
+    "category": "Management"
+  },
+  {
+    "Command": "Status",
+    "Value": "Abbreviated",
+    "Description": "Displays device status information in JSON format\n\nSyntax: Status [<option>]\n\nAllowed values/notes: (no parameter), 0, 1, 2, 3, 4, 5, 6, 7, 10, 11\n\nDocumentation: [Status](https://tasmota.github.io/docs/Commands/#status)",
+    "category": "Management"
+  },
+  {
+    "Command": "SysLog",
+    "Value": "0",
+    "Description": "Controls remote syslog logging level\n\nSyntax: SysLog <level>\n\nAllowed values/notes: 0, 1, 2, 3, 4\n\nDocumentation: [SysLog](https://tasmota.github.io/docs/Commands/#syslog)",
+    "category": "Management"
+  },
+  {
+    "Command": "Template",
+    "Value": "",
+    "Description": "Shows, creates, or stores device GPIO template\n\nSyntax: Template [<option>]\n\nAllowed values/notes: (no parameter), 0, { ... }\n\nDoes not activate template; use Module 0 to activate\n\nDocumentation: [Template](https://tasmota.github.io/docs/Commands/#template)",
+    "category": "Management"
+  },
+  {
+    "Command": "Time",
+    "Value": "0",
+    "Description": "Controls NTP and time format in JSON messages\n\nSyntax: Time [<format>]\n\nAllowed values/notes: 0, 1, 2, 3, 4\n\nDocumentation: [Time](https://tasmota.github.io/docs/Commands/#time)",
+    "category": "Management"
+  },
+  {
+    "Command": "Timezone",
+    "Value": "0",
+    "Description": "Sets device timezone offset from UTC\n\nSyntax: Timezone <offset>\n\nAllowed values/notes: -13..+13, 99\n\nDocumentation: [Timezone](https://tasmota.github.io/docs/Commands/#timezone)",
+    "category": "Management"
+  },
+  {
+    "Command": "Upgrade",
+    "Value": "1",
+    "Description": "Downloads and flashes firmware update from OTA URL\n\nSyntax: Upgrade [<option>]\n\nAllowed values/notes: 1, 2\n\nDocumentation: [Upgrade](https://tasmota.github.io/docs/Commands/#upgrade)",
+    "category": "Management"
+  },
+  {
+    "Command": "WebLog",
+    "Value": "2",
+    "Description": "Controls web console logging level\n\nSyntax: WebLog <level>\n\nAllowed values/notes: 0, 1, 2, 3, 4\n\nDocumentation: [WebLog](https://tasmota.github.io/docs/Commands/#weblog)",
+    "category": "Management"
+  },
+  {
+    "Command": "AP",
+    "Value": "",
+    "Description": "Switch between Wi-Fi access points\n\nSyntax: AP [value]\n\nAllowed values/notes: 0, 1, 2\n\nDocumentation: [AP](https://tasmota.github.io/docs/Commands/#ap)",
+    "category": "Wi-Fi"
+  },
+  {
+    "Command": "Hostname",
+    "Value": "",
+    "Description": "Set or reset the device hostname\n\nSyntax: Hostname [value]\n\nAllowed values/notes: 1, <value>\n\nDocumentation: [Hostname](https://tasmota.github.io/docs/Commands/#hostname)",
+    "category": "Wi-Fi"
+  },
+  {
+    "Command": "IPAddress",
+    "Value": "",
+    "Description": "Configure networking IP addresses\n\nSyntax: IPAddress<x> [value]\n\nAllowed values/notes: IPAddress1, IPAddress2, IPAddress3, IPAddress4, IPAddress5\n\nApply changes with restart 1\n\nDocumentation: [IPAddress](https://tasmota.github.io/docs/Commands/#ipaddress)",
+    "category": "Wi-Fi"
+  },
+  {
+    "Command": "Password",
+    "Value": "",
+    "Description": "Set Wi-Fi access point password\n\nSyntax: Password<x> [value]\n\nAllowed values/notes: 1, <value>\n\nDocumentation: [Password](https://tasmota.github.io/docs/Commands/#password)",
+    "category": "Wi-Fi"
+  },
+  {
+    "Command": "SSId",
+    "Value": "",
+    "Description": "Set Wi-Fi SSID for access point\n\nSyntax: SSId<x> [value]\n\nAllowed values/notes: 1, 0, <value>\n\nDocumentation: [SSId](https://tasmota.github.io/docs/Commands/#ssid)",
+    "category": "Wi-Fi"
+  },
+  {
+    "Command": "WebPassword",
+    "Value": "WEB_PASSWORD",
+    "Description": "Set webUI access password\n\nSyntax: WebPassword [value]\n\nAllowed values/notes: 0, 1, <value>\n\nDocumentation: [WebPassword](https://tasmota.github.io/docs/Commands/#webpassword)",
+    "category": "Wi-Fi"
+  },
+  {
+    "Command": "WebRefresh",
+    "Value": "2345",
+    "Description": "Set webUI auto-refresh interval\n\nSyntax: WebRefresh <value>\n\nAllowed values/notes: 1000..10000\n\nDocumentation: [WebRefresh](https://tasmota.github.io/docs/Commands/#webrefresh)",
+    "category": "Wi-Fi"
+  },
+  {
+    "Command": "Webserver",
+    "Value": "",
+    "Description": "Control webUI server status\n\nSyntax: Webserver <value>\n\nAllowed values/notes: 0, 1, 2\n\nDocumentation: [Webserver](https://tasmota.github.io/docs/Commands/#webserver)",
+    "category": "Wi-Fi"
+  },
+  {
+    "Command": "Wifi",
+    "Value": "1",
+    "Description": "Enable or disable Wi-Fi connectivity\n\nSyntax: Wifi [value]\n\nAllowed values/notes: 0, 1\n\nDocumentation: [Wifi](https://tasmota.github.io/docs/Commands/#wifi)",
+    "category": "Wi-Fi"
+  },
+  {
+    "Command": "WifiConfig",
+    "Value": "4",
+    "Description": "Configure Wi-Fi connection management method\n\nSyntax: WifiConfig <value>\n\nAllowed values/notes: 0, 2, 4, 5, 6, 7\n\nDocumentation: [WifiConfig](https://tasmota.github.io/docs/Commands/#wificonfig)",
+    "category": "Wi-Fi"
+  },
+  {
+    "Command": "WifiPower",
+    "Value": "17",
+    "Description": "Adjust Wi-Fi transmit power level\n\nSyntax: WifiPower [value]\n\nAllowed values/notes: 0, 1, <dBm>\n\nDocumentation: [WifiPower](https://tasmota.github.io/docs/Commands/#wifipower)",
+    "category": "Wi-Fi"
+  },
+  {
+    "Command": "ButtonRetain",
+    "Value": "0",
+    "Description": "Enable or disable MQTT retain flag for button messages\n\nSyntax: ButtonRetain <value>\n\nAllowed values/notes: 0, 1\n\nDocumentation: [ButtonRetain](https://tasmota.github.io/docs/Commands/#buttonretain)",
+    "category": "MQTT"
+  },
+  {
+    "Command": "ButtonTopic",
+    "Value": "0",
+    "Description": "Set MQTT topic for button press messages\n\nSyntax: ButtonTopic <value>\n\nAllowed values/notes: 0, 1, 2\n\nDocumentation: [ButtonTopic](https://tasmota.github.io/docs/Commands/#buttontopic)",
+    "category": "MQTT"
+  },
+  {
+    "Command": "FullTopic",
+    "Value": "Firmware defined",
+    "Description": "Set MQTT full topic format with substitution tokens\n\nSyntax: FullTopic <value>\n\nAllowed values/notes: 1, <value>\n\nRequires restart\n\nDocumentation: [FullTopic](https://tasmota.github.io/docs/Commands/#fulltopic)",
+    "category": "MQTT"
+  },
+  {
+    "Command": "GroupTopic",
+    "Value": "MQTT_GRPTOPIC",
+    "Description": "Configure MQTT group topic for device groups\n\nSyntax: GroupTopic<x> <value>\n\nAllowed values/notes: 1, <value>\n\nRequires restart\n\nDocumentation: [GroupTopic](https://tasmota.github.io/docs/Commands/#grouptopic)",
+    "category": "MQTT"
+  },
+  {
+    "Command": "MqttClient",
+    "Value": "Firmware defined",
+    "Description": "Set MQTT client identifier\n\nSyntax: MqttClient <value>\n\nAllowed values/notes: 1, <value>\n\nRequires restart\n\nDocumentation: [MqttClient](https://tasmota.github.io/docs/Commands/#mqttclient)",
+    "category": "MQTT"
+  },
+  {
+    "Command": "MqttHost",
+    "Value": "Firmware defined",
+    "Description": "Configure MQTT broker address\n\nSyntax: MqttHost <value>\n\nAllowed values/notes: 0, 1, <value>\n\nRequires restart; do NOT use .local\n\nDocumentation: [MqttHost](https://tasmota.github.io/docs/Commands/#mqtthost)",
+    "category": "MQTT"
+  },
+  {
+    "Command": "MqttKeepAlive",
+    "Value": "30",
+    "Description": "Set MQTT keep-alive timer\n\nSyntax: MqttKeepAlive <value>\n\nAllowed values/notes: 1..100\n\nDocumentation: [MqttKeepAlive](https://tasmota.github.io/docs/Commands/#mqttkeepalive)",
+    "category": "MQTT"
+  },
+  {
+    "Command": "MqttPassword",
+    "Value": "Firmware defined",
+    "Description": "Set MQTT broker password\n\nSyntax: MqttPassword <value>\n\nAllowed values/notes: 0, 1, <value>\n\nRequires restart\n\nDocumentation: [MqttPassword](https://tasmota.github.io/docs/Commands/#mqttpassword)",
+    "category": "MQTT"
+  },
+  {
+    "Command": "MqttPort",
+    "Value": "Firmware defined",
+    "Description": "Set MQTT broker port\n\nSyntax: MqttPort <value>\n\nAllowed values/notes: 1, <value>\n\nRequires restart\n\nDocumentation: [MqttPort](https://tasmota.github.io/docs/Commands/#mqttport)",
+    "category": "MQTT"
+  },
+  {
+    "Command": "MqttRetry",
+    "Value": "10",
+    "Description": "Set MQTT connection retry timer\n\nSyntax: MqttRetry <value>\n\nAllowed values/notes: 10..32000\n\nDocumentation: [MqttRetry](https://tasmota.github.io/docs/Commands/#mqttretry)",
+    "category": "MQTT"
+  },
+  {
+    "Command": "MqttUser",
+    "Value": "Firmware defined",
+    "Description": "Set MQTT broker username\n\nSyntax: MqttUser <value>\n\nAllowed values/notes: 0, 1, <value>\n\nRequires restart\n\nDocumentation: [MqttUser](https://tasmota.github.io/docs/Commands/#mqttuser)",
+    "category": "MQTT"
+  },
+  {
+    "Command": "PowerRetain",
+    "Value": "0",
+    "Description": "Control MQTT retain flag for power state messages\n\nSyntax: PowerRetain <value>\n\nAllowed values/notes: 0, 1\n\nDocumentation: [PowerRetain](https://tasmota.github.io/docs/Commands/#powerretain)",
+    "category": "MQTT"
+  },
+  {
+    "Command": "Publish",
+    "Value": "",
+    "Description": "Publish arbitrary topic and payload via MQTT\n\nSyntax: Publish <topic> <payload>\n\nAllowed values/notes: <topic>, <payload>\n\nNo retain flag\n\nDocumentation: [Publish](https://tasmota.github.io/docs/Commands/#publish)",
+    "category": "MQTT"
+  },
+  {
+    "Command": "Publish2",
+    "Value": "",
+    "Description": "Publish with retain flag enabled\n\nSyntax: Publish2 <topic> <payload>\n\nAllowed values/notes: <topic>, <payload>\n\nIncludes retain flag\n\nDocumentation: [Publish2](https://tasmota.github.io/docs/Commands/#publish2)",
+    "category": "MQTT"
+  },
+  {
+    "Command": "SensorRetain",
+    "Value": "0",
+    "Description": "Control MQTT retain flag for sensor messages\n\nSyntax: SensorRetain <value>\n\nAllowed values/notes: 0, 1\n\nDocumentation: [SensorRetain](https://tasmota.github.io/docs/Commands/#sensorretain)",
+    "category": "MQTT"
+  },
+  {
+    "Command": "StateRetain",
+    "Value": "0",
+    "Description": "Control MQTT retain flag for state messages\n\nSyntax: StateRetain <value>\n\nAllowed values/notes: 0, 1\n\nDocumentation: [StateRetain](https://tasmota.github.io/docs/Commands/#stateretain)",
+    "category": "MQTT"
+  },
+  {
+    "Command": "Subscribe",
+    "Value": "",
+    "Description": "Subscribe to MQTT topic and assign event trigger name\n\nSyntax: Subscribe <eventName>, <mqttTopic> [, <key>]\n\nAllowed values/notes: <eventName>, <mqttTopic>, <key>\n\nUsed for rule triggers\n\nDocumentation: [Subscribe](https://tasmota.github.io/docs/Commands/#subscribe)",
+    "category": "MQTT"
+  },
+  {
+    "Command": "TelePeriod",
+    "Value": "300",
+    "Description": "Set telemetry publication interval\n\nSyntax: TelePeriod <value>\n\nAllowed values/notes: 0, 1, 10..3600\n\nDocumentation: [TelePeriod](https://tasmota.github.io/docs/Commands/#teleperiod)",
+    "category": "MQTT"
+  },
+  {
+    "Command": "Topic",
+    "Value": "MQTT_TOPIC",
+    "Description": "Set primary MQTT device topic\n\nSyntax: Topic <value>\n\nAllowed values/notes: 1, <value>\n\nRequires restart\n\nDocumentation: [Topic](https://tasmota.github.io/docs/Commands/#topic)",
+    "category": "MQTT"
+  },
+  {
+    "Command": "Rule",
+    "Value": "0",
+    "Description": "Define, enable, or manage conditional automation rules\n\nSyntax: Rule<x> <parameter>\n\nAllowed values/notes: 0, 1, 2, 4, 5, 6, 8, 9, 10, <value>, +<value>\n\nOne-shot mode triggers only once until condition returns false\n\nDocumentation: [Rule](https://tasmota.github.io/docs/Commands/#rule)",
+    "category": "Rules"
+  },
+  {
+    "Command": "RuleTimer",
+    "Value": "",
+    "Description": "Countdown event timers for use within rules\n\nSyntax: RuleTimer<x> <value>\n\nAllowed values/notes: 0..65535\n\nUp to 8 timers available\n\nDocumentation: [RuleTimer](https://tasmota.github.io/docs/Commands/#ruletimer)",
+    "category": "Rules"
+  },
+  {
+    "Command": "Var",
+    "Value": "",
+    "Description": "Manage up to 16 variables stored in RAM\n\nSyntax: Var<x> <value>\n\nAllowed values/notes: <string>, \"\"\n\nVariables lost on restart\n\nDocumentation: [Var](https://tasmota.github.io/docs/Commands/#var)",
+    "category": "Rules"
+  },
+  {
+    "Command": "Mem",
+    "Value": "",
+    "Description": "Manage up to 16 variables persistently stored in flash\n\nSyntax: Mem<x> <value>\n\nAllowed values/notes: <value>, \"\"\n\nSettings survive device restart\n\nDocumentation: [Mem](https://tasmota.github.io/docs/Commands/#mem)",
+    "category": "Rules"
+  },
+  {
+    "Command": "Event",
+    "Value": "",
+    "Description": "Trigger a rule event from console or MQTT\n\nSyntax: Event <event_name>\n\nAllowed values/notes: <event_name>\n\nDocumentation: [Event](https://tasmota.github.io/docs/Commands/#event)",
+    "category": "Rules"
+  },
+  {
+    "Command": "Timer",
+    "Value": "",
+    "Description": "Configure individual timer parameters\n\nSyntax: Timer<x> <parameters>\n\nAllowed values/notes: 0, 1..16, { JSON }\n\nx = 1..16\n\nDocumentation: [Timer](https://tasmota.github.io/docs/Commands/#timer)",
+    "category": "Timers"
+  },
+  {
+    "Command": "Timers",
+    "Value": "",
+    "Description": "Control all timers globally\n\nSyntax: Timers <state>\n\nAllowed values/notes: 0, 1, 2\n\nDocumentation: [Timers](https://tasmota.github.io/docs/Commands/#timers)",
+    "category": "Timers"
+  },
+  {
+    "Command": "Latitude",
+    "Value": "",
+    "Description": "Set geographic latitude for sunrise/sunset calculations\n\nSyntax: Latitude <value>\n\nAllowed values/notes: <value>\n\nDocumentation: [Latitude](https://tasmota.github.io/docs/Commands/#latitude)",
+    "category": "Timers"
+  },
+  {
+    "Command": "Longitude",
+    "Value": "",
+    "Description": "Set geographic longitude for sunrise/sunset calculations\n\nSyntax: Longitude <value>\n\nAllowed values/notes: <value>\n\nDocumentation: [Longitude](https://tasmota.github.io/docs/Commands/#longitude)",
+    "category": "Timers"
+  },
+  {
+    "Command": "Sunrise",
+    "Value": "0",
+    "Description": "Define sunrise/sunset type for timer calculations\n\nSyntax: Sunrise <type>\n\nAllowed values/notes: 0, 1, 2, 3\n\nDocumentation: [Sunrise](https://tasmota.github.io/docs/Commands/#sunrise)",
+    "category": "Timers"
+  },
+  {
+    "Command": "Altitude",
+    "Value": "0",
+    "Description": "Set altitude for barometric pressure calculations\n\nSyntax: Altitude <value>\n\nAllowed values/notes: <value>\n\nDocumentation: [Altitude](https://tasmota.github.io/docs/Commands/#altitude)",
+    "category": "Sensors"
+  },
+  {
+    "Command": "Counter",
+    "Value": "0",
+    "Description": "Manage counter values for pulse counting sensors\n\nSyntax: Counter<x> [<value>]\n\nAllowed values/notes: 0, 1..4294967295, +/- values\n\nDocumentation: [Counter](https://tasmota.github.io/docs/Commands/#counter)",
+    "category": "Sensors"
+  },
+  {
+    "Command": "CounterDebounce",
+    "Value": "0",
+    "Description": "Set debounce timing for counter pulses\n\nSyntax: CounterDebounce <milliseconds>\n\nAllowed values/notes: 0..32000\n\nDocumentation: [CounterDebounce](https://tasmota.github.io/docs/Commands/#counterdebounce)",
+    "category": "Sensors"
+  },
+  {
+    "Command": "CounterType",
+    "Value": "0",
+    "Description": "Configure counter operation mode\n\nSyntax: CounterType<x> <mode>\n\nAllowed values/notes: 0, 1\n\nDocumentation: [CounterType](https://tasmota.github.io/docs/Commands/#countertype)",
+    "category": "Sensors"
+  },
+  {
+    "Command": "TempOffset",
+    "Value": "0",
+    "Description": "Apply calibration offset to temperature readings\n\nSyntax: TempOffset <value>\n\nAllowed values/notes: <value>\n\nDocumentation: [TempOffset](https://tasmota.github.io/docs/Commands/#tempoffset)",
+    "category": "Sensors"
+  },
+  {
+    "Command": "HumOffset",
+    "Value": "0",
+    "Description": "Apply calibration offset to humidity readings\n\nSyntax: HumOffset <value>\n\nAllowed values/notes: <value>\n\nDocumentation: [HumOffset](https://tasmota.github.io/docs/Commands/#humoffset)",
+    "category": "Sensors"
+  },
+  {
+    "Command": "TempRes",
+    "Value": "",
+    "Description": "Set temperature sensor display resolution\n\nSyntax: TempRes <value>\n\nAllowed values/notes: 0..3\n\nDocumentation: [TempRes](https://tasmota.github.io/docs/Commands/#tempres)",
+    "category": "Sensors"
+  },
+  {
+    "Command": "HumRes",
+    "Value": "",
+    "Description": "Set humidity sensor display resolution\n\nSyntax: HumRes <value>\n\nAllowed values/notes: 0..3\n\nDocumentation: [HumRes](https://tasmota.github.io/docs/Commands/#humres)",
+    "category": "Sensors"
+  },
+  {
+    "Command": "PressRes",
+    "Value": "",
+    "Description": "Set pressure sensor display resolution\n\nSyntax: PressRes <value>\n\nAllowed values/notes: 0..3\n\nDocumentation: [PressRes](https://tasmota.github.io/docs/Commands/#pressres)",
+    "category": "Sensors"
+  },
+  {
+    "Command": "CurrentCal",
+    "Value": "3500",
+    "Description": "Calibrate current measurements\n\nSyntax: CurrentCal <value>\n\nAllowed values/notes: 1000..32000\n\nDocumentation: [CurrentCal](https://tasmota.github.io/docs/Commands/#currentcal)",
+    "category": "Power Monitoring"
+  },
+  {
+    "Command": "CurrentHigh",
+    "Value": "0",
+    "Description": "Set upper threshold for current alerts\n\nSyntax: CurrentHigh <value>\n\nAllowed values/notes: 0, <value>\n\nDocumentation: [CurrentHigh](https://tasmota.github.io/docs/Commands/#currenthigh)",
+    "category": "Power Monitoring"
+  },
+  {
+    "Command": "CurrentLow",
+    "Value": "0",
+    "Description": "Set lower threshold for current alerts\n\nSyntax: CurrentLow <value>\n\nAllowed values/notes: 0, <value>\n\nDocumentation: [CurrentLow](https://tasmota.github.io/docs/Commands/#currentlow)",
+    "category": "Power Monitoring"
+  },
+  {
+    "Command": "EnergyReset",
+    "Value": "",
+    "Description": "Reset energy counter values\n\nSyntax: EnergyReset<x> <value>\n\nAllowed values/notes: <value>\n\nDocumentation: [EnergyReset](https://tasmota.github.io/docs/Commands/#energyreset)",
+    "category": "Power Monitoring"
+  },
+  {
+    "Command": "MaxPower",
+    "Value": "0",
+    "Description": "Set maximum allowable power threshold\n\nSyntax: MaxPower <value>\n\nAllowed values/notes: 0, <value>\n\nDocumentation: [MaxPower](https://tasmota.github.io/docs/Commands/#maxpower)",
+    "category": "Power Monitoring"
+  },
+  {
+    "Command": "MaxPowerHold",
+    "Value": "10",
+    "Description": "Set duration to maintain power over maximum before shutdown\n\nSyntax: MaxPowerHold <value>\n\nAllowed values/notes: 1, <value>\n\nDocumentation: [MaxPowerHold](https://tasmota.github.io/docs/Commands/#maxpowerhold)",
+    "category": "Power Monitoring"
+  },
+  {
+    "Command": "MaxPowerWindow",
+    "Value": "30",
+    "Description": "Set duration device stays off before restoration attempt\n\nSyntax: MaxPowerWindow <value>\n\nAllowed values/notes: 1, <value>\n\nDocumentation: [MaxPowerWindow](https://tasmota.github.io/docs/Commands/#maxpowerwindow)",
+    "category": "Power Monitoring"
+  },
+  {
+    "Command": "PowerCal",
+    "Value": "12530",
+    "Description": "Calibrate power measurements\n\nSyntax: PowerCal <value>\n\nAllowed values/notes: 1000..32000\n\nDocumentation: [PowerCal](https://tasmota.github.io/docs/Commands/#powercal)",
+    "category": "Power Monitoring"
+  },
+  {
+    "Command": "PowerDelta",
+    "Value": "0",
+    "Description": "Set threshold for reporting power changes\n\nSyntax: PowerDelta<x> <value>\n\nAllowed values/notes: 0, 1..100, 101..32000\n\nDocumentation: [PowerDelta](https://tasmota.github.io/docs/Commands/#powerdelta)",
+    "category": "Power Monitoring"
+  },
+  {
+    "Command": "VoltageCal",
+    "Value": "1950",
+    "Description": "Calibrate voltage measurements\n\nSyntax: VoltageCal <value>\n\nAllowed values/notes: 1000..32000\n\nDocumentation: [VoltageCal](https://tasmota.github.io/docs/Commands/#voltagecal)",
+    "category": "Power Monitoring"
+  },
+  {
+    "Command": "VoltageHigh",
+    "Value": "0",
+    "Description": "Set upper threshold for voltage alerts\n\nSyntax: VoltageHigh <value>\n\nAllowed values/notes: 0, <value>\n\nDocumentation: [VoltageHigh](https://tasmota.github.io/docs/Commands/#voltagehigh)",
+    "category": "Power Monitoring"
+  },
+  {
+    "Command": "VoltageLow",
+    "Value": "0",
+    "Description": "Set lower threshold for voltage alerts\n\nSyntax: VoltageLow <value>\n\nAllowed values/notes: 0, <value>\n\nDocumentation: [VoltageLow](https://tasmota.github.io/docs/Commands/#voltagelow)",
+    "category": "Power Monitoring"
+  },
+  {
+    "Command": "Channel",
+    "Value": "",
+    "Description": "Set PWM channel dimmer value\n\nSyntax: Channel<x> <value>\n\nAllowed values/notes: 0..100, +, -\n\nDocumentation: [Channel](https://tasmota.github.io/docs/Commands/#channel)",
+    "category": "Light"
+  },
+  {
+    "Command": "Color",
+    "Value": "",
+    "Description": "Set color for addressable LEDs or CT lights\n\nSyntax: Color<x> <value>\n\nAllowed values/notes: r,g,b, #RRGGBB, #RRGGBBWW, #RRGGBBCWWW\n\nDocumentation: [Color](https://tasmota.github.io/docs/Commands/#color)",
+    "category": "Light"
+  },
+  {
+    "Command": "CT",
+    "Value": "",
+    "Description": "Set color temperature for CT lights\n\nSyntax: CT <value>\n\nAllowed values/notes: 153..500, +, -\n\nDocumentation: [CT](https://tasmota.github.io/docs/Commands/#ct)",
+    "category": "Light"
+  },
+  {
+    "Command": "CTRange",
+    "Value": "153,500",
+    "Description": "Specify CT range of the bulb\n\nSyntax: CTRange <ct_min>,<ct_max>\n\nAllowed values/notes: <ct_min>, <ct_max>\n\nNot persisted in flash\n\nDocumentation: [CTRange](https://tasmota.github.io/docs/Commands/#ctrange)",
+    "category": "Light"
+  },
+  {
+    "Command": "Dimmer",
+    "Value": "",
+    "Description": "Set dimmer value from 0 to 100%\n\nSyntax: Dimmer <value>\n\nAllowed values/notes: 0..100, +, -, <, >\n\nDocumentation: [Dimmer](https://tasmota.github.io/docs/Commands/#dimmer)",
+    "category": "Light"
+  },
+  {
+    "Command": "DimmerRange",
+    "Value": "",
+    "Description": "Change dimming range\n\nSyntax: DimmerRange <dimmerMin>,<dimmerMax>\n\nAllowed values/notes: <dimmerMin>, <dimmerMax>\n\nDocumentation: [DimmerRange](https://tasmota.github.io/docs/Commands/#dimmerrange)",
+    "category": "Light"
+  },
+  {
+    "Command": "DimmerStep",
+    "Value": "10",
+    "Description": "Set Dimmer +/- step value\n\nSyntax: DimmerStep <value>\n\nAllowed values/notes: 1..50\n\nDocumentation: [DimmerStep](https://tasmota.github.io/docs/Commands/#dimmerstep)",
+    "category": "Light"
+  },
+  {
+    "Command": "Fade",
+    "Value": "0",
+    "Description": "Enable or disable fade effect\n\nSyntax: Fade <value>\n\nAllowed values/notes: 0, 1\n\nDocumentation: [Fade](https://tasmota.github.io/docs/Commands/#fade)",
+    "category": "Light"
+  },
+  {
+    "Command": "HSBColor",
+    "Value": "",
+    "Description": "Set color by hue, saturation, brightness\n\nSyntax: HSBColor <hue>,<sat>,<bri>\n\nAllowed values/notes: <hue>, <sat>, <bri>\n\nDocumentation: [HSBColor](https://tasmota.github.io/docs/Commands/#hsbcolor)",
+    "category": "Light"
+  },
+  {
+    "Command": "LedTable",
+    "Value": "1",
+    "Description": "Enable or disable LED gamma correction\n\nSyntax: LedTable <value>\n\nAllowed values/notes: 0, 1\n\nVersion-dependent default\n\nDocumentation: [LedTable](https://tasmota.github.io/docs/Commands/#ledtable)",
+    "category": "Light"
+  },
+  {
+    "Command": "Pixels",
+    "Value": "",
+    "Description": "Set number of pixels in addressable LED strip\n\nSyntax: Pixels <value>\n\nAllowed values/notes: 1..512\n\nDocumentation: [Pixels](https://tasmota.github.io/docs/Commands/#pixels)",
+    "category": "Light"
+  },
+  {
+    "Command": "RGBWWTable",
+    "Value": "255,255,255,255,255",
+    "Description": "Control light intensity of unbalanced PWM channels\n\nSyntax: RGBWWTable PWM1,PWM2,PWM3,PWM4,PWM5\n\nAllowed values/notes: 0..255\n\nApplied after gamma correction\n\nDocumentation: [RGBWWTable](https://tasmota.github.io/docs/Commands/#rgbwwtable)",
+    "category": "Light"
+  },
+  {
+    "Command": "Scheme",
+    "Value": "0",
+    "Description": "Set light effects or color schemes\n\nSyntax: Scheme <value>\n\nAllowed values/notes: 0, 1, 2, 3, 4, 5..14\n\nDocumentation: [Scheme](https://tasmota.github.io/docs/Commands/#scheme)",
+    "category": "Light"
+  },
+  {
+    "Command": "Speed",
+    "Value": "",
+    "Description": "Set fade speed for light effects\n\nSyntax: Speed <value>\n\nAllowed values/notes: 1..40, +/-\n\nValue represents time in 0.5s increments\n\nDocumentation: [Speed](https://tasmota.github.io/docs/Commands/#speed)",
+    "category": "Light"
+  },
+  {
+    "Command": "White",
+    "Value": "",
+    "Description": "Set white channel brightness\n\nSyntax: White <value>\n\nAllowed values/notes: 1..100\n\nDocumentation: [White](https://tasmota.github.io/docs/Commands/#white)",
+    "category": "Light"
+  },
+  {
+    "Command": "WakeUp",
+    "Value": "",
+    "Description": "Start wake-up sequence\n\nSyntax: WakeUp <value>\n\nAllowed values/notes: 0..100\n\nDocumentation: [WakeUp](https://tasmota.github.io/docs/Commands/#wakeup)",
+    "category": "Light"
+  },
+  {
+    "Command": "WakeUpDuration",
+    "Value": "",
+    "Description": "Set wake-up sequence duration\n\nSyntax: WakeUpDuration <value>\n\nAllowed values/notes: 1..3000\n\nDocumentation: [WakeUpDuration](https://tasmota.github.io/docs/Commands/#wakeupduration)",
+    "category": "Light"
+  },
+  {
+    "Command": "ShutterMode",
+    "Value": "1",
+    "Description": "Define how the shutter operates relays, steppers and/or servos\n\nSyntax: ShutterMode <value>\n\nAllowed values/notes: 1, 2, 3, 4, 5, 6, 7\n\nDocumentation: [ShutterMode](https://tasmota.github.io/docs/Commands/#shuttermode)",
+    "category": "Shutter"
+  },
+  {
+    "Command": "ShutterOpen",
+    "Value": "",
+    "Description": "Engage relay to open the shutter\n\nSyntax: ShutterOpen<x>\n\nDocumentation: [ShutterOpen](https://tasmota.github.io/docs/Commands/#shutteropen)",
+    "category": "Shutter"
+  },
+  {
+    "Command": "ShutterClose",
+    "Value": "",
+    "Description": "Engage relay to close the shutter\n\nSyntax: ShutterClose<x>\n\nDocumentation: [ShutterClose](https://tasmota.github.io/docs/Commands/#shutterclose)",
+    "category": "Shutter"
+  },
+  {
+    "Command": "ShutterStop",
+    "Value": "",
+    "Description": "Disengage relays to stop shutter movement\n\nSyntax: ShutterStop<x>\n\nDocumentation: [ShutterStop](https://tasmota.github.io/docs/Commands/#shutterstop)",
+    "category": "Shutter"
+  },
+  {
+    "Command": "ShutterPosition",
+    "Value": "",
+    "Description": "Set shutter position or perform movement commands\n\nSyntax: ShutterPosition<x> <value>\n\nAllowed values/notes: 0..100, UP/OPEN, DOWN/CLOSE, STOP, TOGGLE\n\nDocumentation: [ShutterPosition](https://tasmota.github.io/docs/Commands/#shutterposition)",
+    "category": "Shutter"
+  },
+  {
+    "Command": "ShutterOpenDuration",
+    "Value": "10.0",
+    "Description": "Time required to fully open the shutter\n\nSyntax: ShutterOpenDuration<x> <value>\n\nAllowed values/notes: 1.0..240.0\n\nDocumentation: [ShutterOpenDuration](https://tasmota.github.io/docs/Commands/#shutteropenduration)",
+    "category": "Shutter"
+  },
+  {
+    "Command": "ShutterCloseDuration",
+    "Value": "10.0",
+    "Description": "Time required to fully close the shutter\n\nSyntax: ShutterCloseDuration<x> <value>\n\nAllowed values/notes: 1.0..240.0\n\nDocumentation: [ShutterCloseDuration](https://tasmota.github.io/docs/Commands/#shuttercloseduration)",
+    "category": "Shutter"
+  },
+  {
+    "Command": "ShutterRelay",
+    "Value": "",
+    "Description": "Assign relay pair to control shutter\n\nSyntax: ShutterRelay<x> <value>\n\nAllowed values/notes: 0, <value>\n\nMust execute before other shutter commands\n\nDocumentation: [ShutterRelay](https://tasmota.github.io/docs/Commands/#shutterrelay)",
+    "category": "Shutter"
+  },
+  {
+    "Command": "ShutterInvert",
+    "Value": "0",
+    "Description": "Invert shutter positioning direction\n\nSyntax: ShutterInvert<x> <value>\n\nAllowed values/notes: 0, 1\n\nDocumentation: [ShutterInvert](https://tasmota.github.io/docs/Commands/#shutterinvert)",
+    "category": "Shutter"
+  },
+  {
+    "Command": "ShutterLock",
+    "Value": "0",
+    "Description": "Lock or unlock shutter positioning\n\nSyntax: ShutterLock<x> <value>\n\nAllowed values/notes: 0, 1\n\nDocumentation: [ShutterLock](https://tasmota.github.io/docs/Commands/#shutterlock)",
+    "category": "Shutter"
+  },
+  {
+    "Command": "ZbPermitJoin",
+    "Value": "",
+    "Description": "Enable/disable pairing mode for device discovery\n\nSyntax: ZbPermitJoin [0|1|99]\n\nAllowed values/notes: 0, 1, 99\n\nDocumentation: [ZbPermitJoin](https://tasmota.github.io/docs/Commands/#zbpermitjoin)",
+    "category": "Zigbee"
+  },
+  {
+    "Command": "ZbName",
+    "Value": "",
+    "Description": "Set or retrieve device friendly name\n\nSyntax: ZbName <device>[,<name>]\n\nAllowed values/notes: <device>, <name>\n\nDocumentation: [ZbName](https://tasmota.github.io/docs/Commands/#zbname)",
+    "category": "Zigbee"
+  },
+  {
+    "Command": "ZbSend",
+    "Value": "",
+    "Description": "Send commands to Zigbee device\n\nSyntax: ZbSend {\"Device\":\"<addr>\", \"Send\":{...}}\n\nAllowed values/notes: Device, Endpoint, Send\n\nDocumentation: [ZbSend](https://tasmota.github.io/docs/Commands/#zbsend)",
+    "category": "Zigbee"
+  },
+  {
+    "Command": "ZbStatus",
+    "Value": "",
+    "Description": "Display Zigbee devices detected since boot\n\nSyntax: ZbStatus [<x>] [<device>]\n\nAllowed values/notes: 1, 2, 3\n\nDocumentation: [ZbStatus](https://tasmota.github.io/docs/Commands/#zbstatus)",
+    "category": "Zigbee"
+  },
+  {
+    "Command": "ZbBind",
+    "Value": "",
+    "Description": "Establish direct communication between Zigbee devices\n\nSyntax: ZbBind {\"Device\":..., \"Endpoint\":..., \"Cluster\":...}\n\nAllowed values/notes: Device, Endpoint, Cluster, ToDevice/ToGroup\n\nDocumentation: [ZbBind](https://tasmota.github.io/docs/Commands/#zbbind)",
+    "category": "Zigbee"
+  },
+  {
+    "Command": "ZbForget",
+    "Value": "",
+    "Description": "Remove device from Tasmota flash memory\n\nSyntax: ZbForget <device>\n\nAllowed values/notes: <device>\n\nDocumentation: [ZbForget](https://tasmota.github.io/docs/Commands/#zbforget)",
+    "category": "Zigbee"
+  },
+  {
+    "Command": "ZbPing",
+    "Value": "",
+    "Description": "Test device availability\n\nSyntax: ZbPing <device>\n\nAllowed values/notes: <device>\n\nDocumentation: [ZbPing](https://tasmota.github.io/docs/Commands/#zbping)",
+    "category": "Zigbee"
+  },
+  {
+    "Command": "IRSend",
+    "Value": "",
+    "Description": "Send IR remote control codes\n\nSyntax: IRSend<x> {\"Protocol\":\"<value>\",\"Bits\":<n>,\"Data\":<value>}\n\nAllowed values/notes: Protocol, Bits, Data\n\nDocumentation: [IRSend](https://tasmota.github.io/docs/Commands/#irsend)",
+    "category": "IR Remote"
+  },
+  {
+    "Command": "IRHVAC",
+    "Value": "",
+    "Description": "Send HVAC IR remote control codes\n\nSyntax: IRHVAC <json_payload>\n\nAllowed values/notes: Vendor, Power, Mode, FanSpeed, Temp\n\nDocumentation: [IRHVAC](https://tasmota.github.io/docs/Commands/#irhvac)",
+    "category": "IR Remote"
+  },
+  {
+    "Command": "Display",
+    "Value": "",
+    "Description": "Show current display setting as JSON\n\nSyntax: Display\n\nDocumentation: [Display](https://tasmota.github.io/docs/Commands/#display)",
+    "category": "Displays"
+  },
+  {
+    "Command": "DisplayModel",
+    "Value": "",
+    "Description": "Set display model/type\n\nSyntax: DisplayModel <value>\n\nAllowed values/notes: 1, 2, 3, 4, 5, 7, 15\n\nDocumentation: [DisplayModel](https://tasmota.github.io/docs/Commands/#displaymodel)",
+    "category": "Displays"
+  },
+  {
+    "Command": "DisplayDimmer",
+    "Value": "",
+    "Description": "Control display brightness\n\nSyntax: DisplayDimmer <value>\n\nAllowed values/notes: 0, 1..100\n\nDocumentation: [DisplayDimmer](https://tasmota.github.io/docs/Commands/#displaydimmer)",
+    "category": "Displays"
+  },
+  {
+    "Command": "DisplayText",
+    "Value": "",
+    "Description": "Display text on screen\n\nSyntax: DisplayText <value>\n\nAllowed values/notes: <value>\n\nDocumentation: [DisplayText](https://tasmota.github.io/docs/Commands/#displaytext)",
+    "category": "Displays"
+  },
+  {
+    "Command": "DisplayRotate",
+    "Value": "",
+    "Description": "Set display rotation angle\n\nSyntax: DisplayRotate <value>\n\nAllowed values/notes: 0, 1, 2, 3\n\nDocumentation: [DisplayRotate](https://tasmota.github.io/docs/Commands/#displayrotate)",
+    "category": "Displays"
+  },
+  {
+    "Command": "Br",
+    "Value": "",
+    "Description": "Execute Berry code from console\n\nSyntax: Br <berry_code>\n\nAllowed values/notes: <berry_code>\n\nDocumentation: [Br](https://tasmota.github.io/docs/Commands/#br)",
+    "category": "Berry"
+  },
+  {
+    "Command": "BrRestart",
+    "Value": "",
+    "Description": "Restart Berry virtual machine without rebooting\n\nSyntax: BrRestart\n\nDocumentation: [BrRestart](https://tasmota.github.io/docs/Commands/#brrestart)",
+    "category": "Berry"
+  },
+  {
+    "Command": "RfCode",
+    "Value": "",
+    "Description": "Display or send 24-bit user codes\n\nSyntax: RfCode [<value>]\n\nAllowed values/notes: 1..8388607\n\nDocumentation: [RfCode](https://tasmota.github.io/docs/Commands/#rfcode)",
+    "category": "RF Bridge"
+  },
+  {
+    "Command": "RfHigh",
+    "Value": "840",
+    "Description": "Configure high pulse timing duration\n\nSyntax: RfHigh [<value>]\n\nAllowed values/notes: 1, 2..32767\n\nDocumentation: [RfHigh](https://tasmota.github.io/docs/Commands/#rfhigh)",
+    "category": "RF Bridge"
+  },
+  {
+    "Command": "RfLow",
+    "Value": "270",
+    "Description": "Configure low pulse timing duration\n\nSyntax: RfLow [<value>]\n\nAllowed values/notes: 1, 2..32767\n\nDocumentation: [RfLow](https://tasmota.github.io/docs/Commands/#rflow)",
+    "category": "RF Bridge"
+  },
+  {
+    "Command": "RfSync",
+    "Value": "8470",
+    "Description": "Configure start sync pulse duration\n\nSyntax: RfSync [<value>]\n\nAllowed values/notes: 1, 2..32767\n\nDocumentation: [RfSync](https://tasmota.github.io/docs/Commands/#rfsync)",
+    "category": "RF Bridge"
+  },
+  {
+    "Command": "TuyaMCU",
+    "Value": "",
+    "Description": "Maps functions to TuyaMCU data points\n\nSyntax: TuyaMCU <fnId>,<dpId>\n\nAllowed values/notes: <fnId>, <dpId>\n\nDocumentation: [TuyaMCU](https://tasmota.github.io/docs/Commands/#tuyamcu)",
+    "category": "TuyaMCU"
+  },
+  {
+    "Command": "TuyaSend",
+    "Value": "",
+    "Description": "Transmits data to MCU\n\nSyntax: TuyaSend<x> <parameters>\n\nAllowed values/notes: TuyaSend0, TuyaSend1 <dpId>,<bool>, TuyaSend2 <dpId>,<int>, TuyaSend3 <dpId>,<str>, TuyaSend4 <dpId>,<enum>\n\nDocumentation: [TuyaSend](https://tasmota.github.io/docs/Commands/#tuyasend)",
+    "category": "TuyaMCU"
+  },
+  {
+    "Command": "Baudrate",
+    "Value": "115200",
+    "Description": "Set hardware serial bridge baud rate\n\nSyntax: Baudrate <value>\n\nAllowed values/notes: 1, <value>\n\nDocumentation: [Baudrate](https://tasmota.github.io/docs/Commands/#baudrate)",
+    "category": "Serial Bridge"
+  },
+  {
+    "Command": "SerialSend",
+    "Value": "",
+    "Description": "Send data via hardware serial bridge\n\nSyntax: SerialSend<x> <string>\n\nAllowed values/notes: 1, 2, 3, 4, 5\n\nDocumentation: [SerialSend](https://tasmota.github.io/docs/Commands/#serialsend)",
+    "category": "Serial Bridge"
+  },
+  {
+    "Command": "BLEMode",
+    "Value": "2",
+    "Description": "Set BLE scanning operational mode\n\nSyntax: BLEMode [0|1|2]\n\nAllowed values/notes: 0, 1, 2\n\nDocumentation: [BLEMode](https://tasmota.github.io/docs/Commands/#blemode)",
+    "category": "Bluetooth"
+  },
+  {
+    "Command": "BLEScan",
+    "Value": "",
+    "Description": "Trigger or configure BLE scan\n\nSyntax: BLEScan [0|1|n]\n\nAllowed values/notes: (no parameter), n\n\nDocumentation: [BLEScan](https://tasmota.github.io/docs/Commands/#blescan)",
+    "category": "Bluetooth"
+  },
+  {
+    "Command": "IBeacon",
+    "Value": "",
+    "Description": "Enable/disable iBeacon device tracking\n\nSyntax: IBeacon [0|1]\n\nAllowed values/notes: 0, 1\n\nDocumentation: [IBeacon](https://tasmota.github.io/docs/Commands/#ibeacon)",
+    "category": "Bluetooth"
+  },
+  {
+    "Command": "SetOption0",
+    "Value": "1",
+    "Description": "Save power state after restart\n\nSyntax: SetOption0 <value>\n\nAllowed values/notes: 0, 1\n\nDocumentation: [SetOption0](https://tasmota.github.io/docs/Commands/#setoption0)",
+    "category": "SetOption"
+  },
+  {
+    "Command": "SetOption1",
+    "Value": "0",
+    "Description": "Button multipress mode\n\nSyntax: SetOption1 <value>\n\nAllowed values/notes: 0, 1\n\nDocumentation: [SetOption1](https://tasmota.github.io/docs/Commands/#setoption1)",
+    "category": "SetOption"
+  },
+  {
+    "Command": "SetOption2",
+    "Value": "0",
+    "Description": "Display global temperature/humidity/pressure in JSON sensor message\n\nSyntax: SetOption2 <value>\n\nAllowed values/notes: 0, 1\n\nDocumentation: [SetOption2](https://tasmota.github.io/docs/Commands/#setoption2)",
+    "category": "SetOption"
+  },
+  {
+    "Command": "SetOption3",
+    "Value": "1",
+    "Description": "MQTT enable/disable\n\nSyntax: SetOption3 <value>\n\nAllowed values/notes: 0, 1\n\nDocumentation: [SetOption3](https://tasmota.github.io/docs/Commands/#setoption3)",
+    "category": "SetOption"
+  },
+  {
+    "Command": "SetOption4",
+    "Value": "0",
+    "Description": "Return MQTT response as RESULT or command topic\n\nSyntax: SetOption4 <value>\n\nAllowed values/notes: 0, 1\n\nDocumentation: [SetOption4](https://tasmota.github.io/docs/Commands/#setoption4)",
+    "category": "SetOption"
+  },
+  {
+    "Command": "SetOption8",
+    "Value": "0",
+    "Description": "Temperature display unit\n\nSyntax: SetOption8 <value>\n\nAllowed values/notes: 0, 1\n\nDocumentation: [SetOption8](https://tasmota.github.io/docs/Commands/#setoption8)",
+    "category": "SetOption"
+  },
+  {
+    "Command": "SetOption10",
+    "Value": "0",
+    "Description": "Device MQTT topic change behavior\n\nSyntax: SetOption10 <value>\n\nAllowed values/notes: 0, 1\n\nDocumentation: [SetOption10](https://tasmota.github.io/docs/Commands/#setoption10)",
+    "category": "SetOption"
+  },
+  {
+    "Command": "SetOption11",
+    "Value": "0",
+    "Description": "Swap button single and double press functionality\n\nSyntax: SetOption11 <value>\n\nAllowed values/notes: 0, 1\n\nDocumentation: [SetOption11](https://tasmota.github.io/docs/Commands/#setoption11)",
+    "category": "SetOption"
+  },
+  {
+    "Command": "SetOption12",
+    "Value": "0",
+    "Description": "Configuration saving to flash\n\nSyntax: SetOption12 <value>\n\nAllowed values/notes: 0, 1\n\nDocumentation: [SetOption12](https://tasmota.github.io/docs/Commands/#setoption12)",
+    "category": "SetOption"
+  },
+  {
+    "Command": "SetOption13",
+    "Value": "0",
+    "Description": "Allow immediate action on single button press\n\nSyntax: SetOption13 <value>\n\nAllowed values/notes: 0, 1\n\nDocumentation: [SetOption13](https://tasmota.github.io/docs/Commands/#setoption13)",
+    "category": "SetOption"
+  },
+  {
+    "Command": "SetOption19",
+    "Value": "0",
+    "Description": "Tasmota discovery protocol for Home Assistant\n\nSyntax: SetOption19 <value>\n\nAllowed values/notes: 0, 1\n\nDocumentation: [SetOption19](https://tasmota.github.io/docs/Commands/#setoption19)",
+    "category": "SetOption"
+  },
+  {
+    "Command": "SetOption20",
+    "Value": "0",
+    "Description": "Update Dimmer/Color/CT without turning power on\n\nSyntax: SetOption20 <value>\n\nAllowed values/notes: 0, 1\n\nDocumentation: [SetOption20](https://tasmota.github.io/docs/Commands/#setoption20)",
+    "category": "SetOption"
+  },
+  {
+    "Command": "SetOption31",
+    "Value": "0",
+    "Description": "Status LED blinking during Wi-Fi and MQTT problems\n\nSyntax: SetOption31 <value>\n\nAllowed values/notes: 0, 1\n\nDocumentation: [SetOption31](https://tasmota.github.io/docs/Commands/#setoption31)",
+    "category": "SetOption"
+  },
+  {
+    "Command": "SetOption32",
+    "Value": "40",
+    "Description": "Button hold time in 0.1 second increments\n\nSyntax: SetOption32 <value>\n\nAllowed values/notes: 1..250\n\nDefault is 4.0 seconds\n\nDocumentation: [SetOption32](https://tasmota.github.io/docs/Commands/#setoption32)",
+    "category": "SetOption"
+  },
+  {
+    "Command": "SetOption34",
+    "Value": "200",
+    "Description": "Backlog inter-command delay in milliseconds\n\nSyntax: SetOption34 <value>\n\nAllowed values/notes: 1..1000\n\nDocumentation: [SetOption34](https://tasmota.github.io/docs/Commands/#setoption34)",
+    "category": "SetOption"
+  },
+  {
+    "Command": "SetOption53",
+    "Value": "0",
+    "Description": "Display hostname and IP address in webUI\n\nSyntax: SetOption53 <value>\n\nAllowed values/notes: 0, 1\n\nDocumentation: [SetOption53](https://tasmota.github.io/docs/Commands/#setoption53)",
+    "category": "SetOption"
+  },
+  {
+    "Command": "SetOption56",
+    "Value": "0",
+    "Description": "Wi-Fi network scan for strongest signal on restart\n\nSyntax: SetOption56 <value>\n\nAllowed values/notes: 0, 1\n\nDocumentation: [SetOption56](https://tasmota.github.io/docs/Commands/#setoption56)",
+    "category": "SetOption"
+  },
+  {
+    "Command": "SetOption57",
+    "Value": "1",
+    "Description": "Wi-Fi network re-scan every 44 minutes\n\nSyntax: SetOption57 <value>\n\nAllowed values/notes: 0, 1\n\nDocumentation: [SetOption57](https://tasmota.github.io/docs/Commands/#setoption57)",
+    "category": "SetOption"
+  },
+  {
+    "Command": "SetOption65",
+    "Value": "0",
+    "Description": "Device recovery using fast power cycle detection\n\nSyntax: SetOption65 <value>\n\nAllowed values/notes: 0, 1\n\nDocumentation: [SetOption65](https://tasmota.github.io/docs/Commands/#setoption65)",
+    "category": "SetOption"
+  },
+  {
+    "Command": "SetOption73",
+    "Value": "0",
+    "Description": "Detach buttons from relays; send MQTT instead\n\nSyntax: SetOption73 <value>\n\nAllowed values/notes: 0, 1\n\nDocumentation: [SetOption73](https://tasmota.github.io/docs/Commands/#setoption73)",
+    "category": "SetOption"
+  },
+  {
+    "Command": "SetOption80",
+    "Value": "0",
+    "Description": "Blinds and shutters support\n\nSyntax: SetOption80 <value>\n\nAllowed values/notes: 0, 1\n\nDocumentation: [SetOption80](https://tasmota.github.io/docs/Commands/#setoption80)",
+    "category": "SetOption"
+  },
+  {
+    "Command": "SetOption85",
+    "Value": "0",
+    "Description": "Device group support\n\nSyntax: SetOption85 <value>\n\nAllowed values/notes: 0, 1\n\nDocumentation: [SetOption85](https://tasmota.github.io/docs/Commands/#setoption85)",
+    "category": "SetOption"
+  },
+  {
+    "Command": "SetOption114",
+    "Value": "0",
+    "Description": "Detach switches from relays; send MQTT instead\n\nSyntax: SetOption114 <value>\n\nAllowed values/notes: 0, 1\n\nDocumentation: [SetOption114](https://tasmota.github.io/docs/Commands/#setoption114)",
+    "category": "SetOption"
+  },
+  {
+    "Command": "SetOption151",
+    "Value": "1",
+    "Description": "Matter support\n\nSyntax: SetOption151 <value>\n\nAllowed values/notes: 0, 1\n\nDocumentation: [SetOption151](https://tasmota.github.io/docs/Commands/#setoption151)",
+    "category": "SetOption"
+  }
+]

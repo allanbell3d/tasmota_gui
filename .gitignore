@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.env
+.venv
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build / logs / outputs
+.buildozer/
+*.log
+*.xlsx
+*.csv
+
+# PyInstaller build artifacts
+build/
+dist/
+*.spec
+!platform/**/*.spec
+!buildozer.spec
+
+# Ignore release builds and executables
+releases/
+*.exe
+*.msi
+*.zip
+*.rar
+*.apk
+
+# Tools and notes (but not requirements.txt)
+*.txt
+!requirements.txt
+
+# Project-specific ignores
+Crap/
+audit/
+Logs/
+venv_kivy/
+.claude/
