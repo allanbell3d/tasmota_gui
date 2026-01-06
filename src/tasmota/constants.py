@@ -295,8 +295,8 @@ COMMAND_LIBRARY = [
         "Issue periodic status requests, monitor network connectivity, and trigger restarts with failure codes when IP loss persists.",
     ),
     (
-        "Rule3 on System#Boot do RuleTimer3 1200 endon on Wifi#Connected do RuleTimer3 0 endon on Rules#Timer=3 do backlog mem1 5; var1 5 endon on Mqtt#Connected do event wd=%mem1% endon on event#wd do Publish watchdog/alert {\"device\":\"%topic%\",\"failure\":%value%} endon on event#wd do Mem1 0 endon",
-        "Publish watchdog alerts over MQTT, clear failure memory when connectivity is restored, and fail-safe reboot path if Wi-Fi never connects within 20 minutes after boot.",
+        "Rule3 on System#Boot do RuleTimer3 43200 endon on Wifi#Connected do RuleTimer3 0 endon on Rules#Timer=3 do backlog mem1 5; var1 5 endon on Mqtt#Connected do event wd=%mem1% endon on event#wd do Publish watchdog/alert {\"device\":\"%topic%\",\"failure\":%value%} endon on event#wd do Mem1 0 endon",
+        "Publish watchdog alerts over MQTT, clear failure memory when connectivity is restored, and fail-safe reboot path if Wi-Fi never connects within 12hrs after boot.",
     ),
 
     ("rule1 1", "Enable Rule1."),
