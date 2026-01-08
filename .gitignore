@@ -39,6 +39,7 @@ releases/
 
 # Tools and notes (but not requirements.txt)
 *.txt
+*.ps1
 !requirements.txt
 
 # Project-specific ignores
