@@ -34,7 +34,7 @@ try {
 
 Write-Host "🔍 Using project root: $ProjectRoot"
 
-$ConstantsFile   = Join-Path $ProjectRoot "src\tastmota\constants.py"
+$ConstantsFile   = Join-Path $ProjectRoot "src\tasmota\constants.py"
 $EntryScript     = Join-Path $ProjectRoot "apps\desktop.py"
 $SourcePath      = Join-Path $ProjectRoot "src"
 $CommandLibrary  = Join-Path $ProjectRoot "assets\commands\tasmota_commands.json"
