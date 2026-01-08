@@ -46,4 +46,6 @@ Crap/
 audit/
 Logs/
 venv_kivy/
-.claude/
+
+# Ignore all hidden directories
+.*/
