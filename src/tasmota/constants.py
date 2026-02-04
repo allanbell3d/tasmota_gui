@@ -294,10 +294,16 @@ COMMAND_LIBRARY = [
         "Rule2 on Time#Minute|10 do backlog status 5 endon on StatusNET#IPAddress==0.0.0.0 do if (var2==0) backlog var2 1; RuleTimer2 120; endif endon on StatusNET#IPAddress$!0.0.0.0 do Var2 0 endon on Rules#Timer=2 do backlog status 5 endon on StatusNET#IPAddress==0.0.0.0 do if (var2==1) backlog mem1 2; var1 2; endif endon on Var1#State>0 do RuleTimer5 2 endon on Rules#Timer=5 do restart 1 endon",
         "Issue periodic status requests, monitor network connectivity, and trigger restarts with failure codes when IP loss persists.",
     ),
+    
     (
-        "Rule3 on System#Boot do RuleTimer3 1200 endon on Wifi#Connected do RuleTimer3 0 endon on Rules#Timer=3 do backlog mem1 5; var1 5 endon on Mqtt#Connected do event wd=%mem1% endon on event#wd do Publish watchdog/alert {\"device\":\"%topic%\",\"failure\":%value%} endon on event#wd do Mem1 0 endon",
-        "Publish watchdog alerts over MQTT, clear failure memory when connectivity is restored, and fail-safe reboot path if Wi-Fi never connects within 20min after boot.",
+        " Rule3 on System#Boot do RuleTimer3 1200 endon on Wifi#Connected do RuleTimer3 0 endon on Mqtt#Connected do backlog RuleTimer3 0; event wd=%mem1% endon on Rules#Timer=3 do backlog mem1 5; var1 5 endon on event#wd do Publish watchdog/alert {\"device\":\"%topic%\",\"failure\":%value%} endon on event#wd do Mem1 0 endon", 
+        "Publish watchdog alerts over MQTT, clear failure memory when connectivity is restored, and fail-safe reboot path if Wi-Fi never connects within 20 minutes after boot.",
     ),
+
+    # (
+        # "Rule3 on System#Boot do RuleTimer3 1200 endon on Wifi#Connected do RuleTimer3 0 endon on Rules#Timer=3 do backlog mem1 5; var1 5 endon on Mqtt#Connected do event wd=%mem1% endon on event#wd do Publish watchdog/alert {\"device\":\"%topic%\",\"failure\":%value%} endon on event#wd do Mem1 0 endon",
+        # "Publish watchdog alerts over MQTT, clear failure memory when connectivity is restored, and fail-safe reboot path if Wi-Fi never connects within 20 minutes after boot.",
+    # ),
 
     ("rule1 1", "Enable Rule1."),
     ("rule2 1", "Enable Rule2."),
