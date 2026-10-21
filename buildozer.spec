@@ -16,11 +16,13 @@ source.exclude_patterns = assets/images/logo.png
 version = 0.3.0
 # pandas/numpy/openpyxl are only used for the desktop Excel/CSV export; the
 # mobile app never exports (out_dir=None), so they are not packaged.
-requirements = python3,kivy,httpx,httpcore,anyio,certifi,idna,charset-normalizer,sniffio,h11
+requirements = python3,kivy,httpx,httpcore,anyio,certifi,idna,sniffio,h11
 orientation = portrait
 fullscreen = 0
 android.permissions = INTERNET
-android.add_assets = assets:assets
+# No android.add_assets: the app reads assets/ from the packaged source
+# folder (private.tar). add_assets copied the whole folder into the APK a
+# second time, including the excluded logo.png and reference docs.
 presplash.filename = assets/images/logo.jpg
 presplash.keep_aspect = 0
 

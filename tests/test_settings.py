@@ -22,7 +22,7 @@ def test_bad_types_fall_back_to_defaults(tmp_path):
     )
     loaded, warning = SettingsStore(tmp_path).load()
     defaults = UserSettings()
-    assert warning is None
+    assert warning and "ignored invalid" in warning
     assert (loaded.threads, loaded.timeout, loaded.retries, loaded.info_mode) == (
         defaults.threads,
         defaults.timeout,
@@ -32,6 +32,8 @@ def test_bad_types_fall_back_to_defaults(tmp_path):
     assert loaded.commands == ["Power on"]
     # Unusable values are kept so a hand edit is not lost on the next save.
     assert loaded.extra["_invalid_threads"] == "abc" and loaded.extra["_invalid_info_mode"] == "huge"
+    # timeout -1 is clamped, not invalid; the int in commands is reported.
+    assert loaded.issues == ["commands", "info_mode", "retries", "threads"]
 
 
 def test_corrupt_file_is_preserved_not_overwritten(tmp_path):
@@ -192,3 +194,22 @@ def test_hand_edited_shapes_are_accepted(tmp_path):
     assert loaded.ip_ranges == "10.0.0.1-5\n10.0.1.1"
     assert loaded.commands == ["Power on", "TelePeriod 30"]
     assert not any(key.startswith("_invalid_") for key in loaded.extra)
+
+
+def test_invalid_values_are_reported_and_cleaned_up(tmp_path):
+    path = tmp_path / SETTINGS_FILENAME
+    path.write_text(json.dumps({"threads": "lots", "web_password": 1234, "_invalid_threads": "older"}))
+    store = SettingsStore(tmp_path)
+    loaded, warning = store.load()
+    assert warning and "threads" in warning
+    assert loaded.web_password == "1234"
+    assert loaded.extra["_invalid_threads"] == "older"  # first set-aside value kept
+    store.save(loaded)
+    saved = json.loads(path.read_text())
+    assert saved["threads"] == UserSettings().threads and "issues" not in saved
+
+    saved["threads"] = 50
+    path.write_text(json.dumps(saved))
+    loaded, warning = SettingsStore(tmp_path).load()
+    assert warning is None and loaded.threads == 50
+    assert "_invalid_threads" not in loaded.extra  # dropped once the key is valid

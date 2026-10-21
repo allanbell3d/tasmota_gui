@@ -477,3 +477,11 @@ def test_httpx_request_logging_is_silenced(network, caplog):
         make_executor(network, ["10.0.0.5"], web_password="s3cret").run()
     assert not any("s3cret" in record.getMessage() for record in caplog.records)
     assert not any(record.name.startswith(("httpx", "httpcore")) for record in caplog.records)
+
+
+def test_redact_handles_spaces_case_and_short_passwords():
+    executor = TasmotaBulkExecutor([], 1, None, 1, 1, 0, False, [], web_password="ab cdefg")
+    assert "cdefg" not in executor._redact("failed with password=ab cdefg here")
+    assert executor._redact("Password=xyz&cmnd=1") == "Password=***&cmnd=1"
+    short = TasmotaBulkExecutor([], 1, None, 1, 1, 0, False, [], web_password="1")
+    assert short._redact("HTTP 401 for password=1") == "HTTP 401 for password=***"

@@ -81,7 +81,9 @@ from .utils import safe_extract_json
 # and logcat, so on Android that wrote one line per scanned IP and leaked the
 # web password. The executor reports outcomes through log_callback instead.
 for _name in ("httpx", "httpcore"):
-    logging.getLogger(_name).setLevel(logging.WARNING)
+    _logger = logging.getLogger(_name)
+    if _logger.level == logging.NOTSET:  # keep a level someone set on purpose
+        _logger.setLevel(logging.WARNING)
 
 LogCallback = Callable[[str, str], None]
 ProgressCallback = Callable[[int, int], None]
@@ -509,11 +511,12 @@ class TasmotaBulkExecutor:
         """
         if not self.web_password or not text:
             return text
-        text = re.sub(r"(password=)[^&\s'\"]*", r"\1***", text)
+        # Whole-secret replacement first, so a password containing spaces or
+        # quotes is not cut short by the pattern below.
         if len(self.web_password) >= 4:
             for secret in {self.web_password, str(httpx.QueryParams({"p": self.web_password}))[2:]}:
                 text = text.replace(secret, "***")
-        return text
+        return re.sub(r"(password=)[^&\s'\"]*", r"\1***", text, flags=re.IGNORECASE)
 
     def _get(self, client: httpx.Client, url: str, params: dict, *, idempotent: bool) -> httpx.Response:
         """GET with retries.

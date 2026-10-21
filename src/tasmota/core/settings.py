@@ -86,6 +86,8 @@ class UserSettings:
     output_dir: str = ""
     web_password: str = ""
     extra: Dict[str, Any] = field(default_factory=dict)
+    # Keys whose stored value could not be used (reported, not saved).
+    issues: List[str] = field(default_factory=list, repr=False, compare=False)
 
     _KNOWN_KEYS = (
         "ip_ranges",
@@ -117,8 +119,8 @@ class UserSettings:
         invalid: Dict[str, Any] = {}
 
         ip_ranges = data.get("ip_ranges")
-        if isinstance(ip_ranges, list) and all(isinstance(line, str) for line in ip_ranges):
-            ip_ranges = "\n".join(ip_ranges)
+        if isinstance(ip_ranges, list) and all(_is_scalar(line) for line in ip_ranges):
+            ip_ranges = "\n".join(str(line) for line in ip_ranges)
         if isinstance(ip_ranges, str):
             settings.ip_ranges = ip_ranges
         elif "ip_ranges" in data:
@@ -151,16 +153,30 @@ class UserSettings:
         elif "info_mode" in data:
             invalid["info_mode"] = data["info_mode"]
 
-        for key in ("output_dir", "web_password"):
-            if isinstance(data.get(key), str):
-                setattr(settings, key, data[key])
-            elif key in data:
-                invalid[key] = data[key]
+        if isinstance(data.get("output_dir"), str):
+            settings.output_dir = data["output_dir"]
+        elif "output_dir" in data:
+            invalid["output_dir"] = data["output_dir"]
+        password = data.get("web_password")
+        if _is_scalar(password):
+            settings.web_password = str(password)  # e.g. 1234 typed without quotes
+        elif "web_password" in data:
+            invalid["web_password"] = password
 
         settings.extra = {k: v for k, v in data.items() if k not in cls._KNOWN_KEYS}
+        for key in cls._KNOWN_KEYS:
+            if key not in invalid:
+                # The key is usable again: drop a leftover from an older edit.
+                settings.extra.pop(f"_invalid_{key}", None)
         for key, value in invalid.items():
-            settings.extra[f"_invalid_{key}"] = value
+            # Keep the first unusable value if one was already set aside.
+            settings.extra.setdefault(f"_invalid_{key}", value)
+        settings.issues = sorted(invalid)
         return settings
+
+
+def _is_scalar(value: Any) -> bool:
+    return isinstance(value, (str, int, float)) and not isinstance(value, bool)
 
 
 def _coerce(value: Any, kind: type, default, low, high):
@@ -275,7 +291,14 @@ class SettingsStore:
                         self._save_blocked = f"could not move the unreadable {path} aside"
                 return UserSettings(), warning + ". Using defaults."
             self.loaded_from = path
-            return UserSettings.from_dict(data), None
+            settings = UserSettings.from_dict(data)
+            if settings.issues:
+                keys = ", ".join(settings.issues)
+                return settings, (
+                    f"Settings file {path}: ignored invalid value(s) for {keys} "
+                    "(kept in the file as _invalid_<key>)"
+                )
+            return settings, None
         return UserSettings(), None
 
     def save(self, settings: UserSettings) -> Optional[str]:

@@ -13,17 +13,23 @@ This project follows **semantic versioning**:
 - **Log panel virtualised (RecycleView).** Before, every log line was its own
   markup Label, and a scan logs one line per unreachable IP. Profiled:
   ~1.5 ms of UI-thread work per line, 40–46 frames over 33 ms and stalls of
-  up to ~240 ms while 1000 lines arrived. Now: 1–6 slow frames, worst ~35–40
-  ms (Xvfb/llvmpipe, same workload). History raised from 100 to 1000 lines;
-  the view follows new output only while scrolled to the bottom.
+  up to ~240 ms while 1000 lines arrived. Now: 5–6 slow frames, worst ~35–37
+  ms (Xvfb/llvmpipe, same workload). Row heights are estimated from font
+  metrics (simulated word wrap) and corrected by each visible row. History
+  raised from 100 to 1000 lines. The view follows new output until you
+  scroll up, and stays put while lines are added or the oldest ones dropped.
 - **Faster scans on phones.** Android thread default 20 → 64, cap 32 → 128.
   Measured: 254 unresponsive hosts at 1 s timeout take 13.2 s at 20 threads,
   4.1 s at 64 and 2.2 s at 128, with ~0.4 s CPU throughout. Needs
-  confirmation on a real phone and access point.
-- **Smaller APK.** pandas, numpy, openpyxl, et-xmlfile, python-dateutil and pytz
-  removed from `buildozer.spec` (~86 MB installed on desktop). They are only
-  used by the desktop export; the mobile import graph and a scan were verified
-  with them blocked.
+  confirmation on a real phone and access point. Existing installs keep the
+  thread count they saved; type 64 in the Threads field to use the new
+  default.
+- **Smaller APK.** pandas, numpy, openpyxl, et-xmlfile, python-dateutil, pytz
+  and charset-normalizer removed from `buildozer.spec` (~86 MB installed on
+  desktop). They are only used by the desktop export (or not at all); the
+  mobile import graph and a scan were verified with them blocked.
+  `android.add_assets` was removed: it copied the whole `assets/` folder into
+  the APK a second time, which the app never reads.
 - **Lighter splash.** `logo.jpg` (128 KB) replaces the 1.1 MB `logo.png` for the
   splash and presplash: Kivy load+upload 39 ms → 16 ms on desktop. The PNG
   stays as the source and is excluded from the APK.
@@ -42,7 +48,12 @@ This project follows **semantic versioning**:
   accepted; values that can't be used are kept as `_invalid_<key>` instead
   of being dropped on the next save.
 - **Redaction:** a very short password no longer mangles unrelated text
-  (e.g. "HTTP 401").
+  (e.g. "HTTP 401"). Passwords with spaces are masked whole, and
+  `Password=` is matched case-insensitively.
+- **Settings:** values that can't be used are reported in the log on startup;
+  a numeric `web_password` (typed without quotes) is accepted; a stale
+  `_invalid_<key>` entry is removed once the key is valid again.
+- httpx/httpcore log levels are only lowered if nobody set them.
 
 ---
 
