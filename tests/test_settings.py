@@ -57,3 +57,29 @@ def test_save_falls_back_when_first_dir_unwritable(tmp_path):
     store._dirs = [blocker / "sub", tmp_path / "fallback"]
     assert store.save(UserSettings(ip_ranges="1.2.3.4")) is None
     assert (tmp_path / "fallback" / SETTINGS_FILENAME).is_file()
+
+
+def test_frozen_exe_reads_bundled_seed_and_saves_next_to_exe(tmp_path, monkeypatch):
+    import sys
+
+    from tasmota.core import settings as settings_mod
+
+    exe_dir = tmp_path / "app"
+    bundle = tmp_path / "_MEI123"
+    (bundle / ".private").mkdir(parents=True)
+    (bundle / ".private" / SETTINGS_FILENAME).write_text(json.dumps({"ip_ranges": "10.9.9.1-9"}))
+    exe_dir.mkdir()
+    monkeypatch.delenv(ENV_SETTINGS_DIR, raising=False)
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "_MEIPASS", str(bundle), raising=False)
+    monkeypatch.setattr(sys, "executable", str(exe_dir / "TasmotaBulkGUI.exe"))
+    monkeypatch.setattr(settings_mod, "_fallback_dir", lambda: tmp_path / "appdata")
+
+    store = SettingsStore()
+    loaded, warning = store.load()
+    assert warning is None and loaded.ip_ranges == "10.9.9.1-9"
+    assert store.save(loaded) is None
+    assert (exe_dir / ".private" / SETTINGS_FILENAME).is_file()
+    # After the first save the file next to the exe wins over the seed.
+    (exe_dir / ".private" / SETTINGS_FILENAME).write_text(json.dumps({"ip_ranges": "1.1.1.1"}))
+    assert SettingsStore().load()[0].ip_ranges == "1.1.1.1"

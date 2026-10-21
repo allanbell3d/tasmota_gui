@@ -1,18 +1,19 @@
-"""
-Parse Tasmota Commands documentation to generate tasmota_commands.json
-Version: 15.2.0
-Date: 2026-01-05
+"""Parse Tasmota Commands documentation to generate tasmota_commands.json.
+
+Usage:
+    python tools/parse_tasmota_docs.py                       # newest commands_raw_*.md
+    python tools/parse_tasmota_docs.py --input path/to/raw.md --output out.json
 """
 
+import argparse
 import re
 import json
-import os
 from pathlib import Path
 
-# Paths
-BASE_DIR = Path(r"D:\IA\Claude\Tasmota_GUI")
-INPUT_FILE = BASE_DIR / "assets" / "reference" / "tasmota" / "commands_raw_2026-01-05_v15.2.0.md"
-OUTPUT_FILE = BASE_DIR / "assets" / "commands" / "tasmota_commands.json"
+# Paths are relative to the repository, so the tool works on any machine.
+BASE_DIR = Path(__file__).resolve().parents[1]
+REFERENCE_DIR = BASE_DIR / "assets" / "reference" / "tasmota"
+DEFAULT_OUTPUT = BASE_DIR / "assets" / "commands" / "tasmota_commands.json"
 
 # Regex patterns
 SECTION_PATTERN = re.compile(r'^###\s+(.+?)(?:\s*\{.*\})?$', re.MULTILINE)
@@ -228,10 +229,24 @@ def parse_markdown(content: str) -> list:
     return commands
 
 
-def main():
-    print(f"Reading: {INPUT_FILE}")
+def _newest_raw_file() -> Path:
+    candidates = sorted(REFERENCE_DIR.glob("commands_raw_*.md"))
+    if not candidates:
+        raise SystemExit(f"No commands_raw_*.md in {REFERENCE_DIR}; run tools/fetch_docs.py first")
+    return candidates[-1]
 
-    with open(INPUT_FILE, 'r', encoding='utf-8') as f:
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--input", type=Path, help="raw Commands.md (default: newest commands_raw_*.md)")
+    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT, help="JSON file to write")
+    args = parser.parse_args()
+    input_file = args.input or _newest_raw_file()
+    output_file = args.output
+
+    print(f"Reading: {input_file}")
+
+    with open(input_file, 'r', encoding='utf-8') as f:
         content = f.read()
 
     print(f"File size: {len(content)} characters")
@@ -251,10 +266,10 @@ def main():
         print(f"  {cat}: {count}")
 
     # Save to JSON
-    with open(OUTPUT_FILE, 'w', encoding='utf-8') as f:
+    with open(output_file, 'w', encoding='utf-8') as f:
         json.dump(commands, f, indent=2, ensure_ascii=False)
 
-    print(f"\nSaved to: {OUTPUT_FILE}")
+    print(f"\nSaved to: {output_file}")
 
     # Show some sample commands for verification
     print("\nSample commands:")

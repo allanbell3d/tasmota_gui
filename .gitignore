@@ -5,8 +5,14 @@ __pycache__/
 *.pyd
 *.egg-info/
 .env
-.venv
+.venv/
 venv/
+venv_kivy/
+.pytest_cache/
+.ruff_cache/
+
+# Private settings (IP ranges, commands, web password). Never commit.
+.private/
 
 # IDE
 .vscode/
@@ -18,26 +24,29 @@ Thumbs.db
 
 # Build / logs / outputs
 .buildozer/
+bin/
 *.log
 *.xlsx
 *.csv
+Logs/
 
-# PyInstaller build artifacts
+# PyInstaller build artifacts (the tracked spec lives in platform/windows/)
 build/
 dist/
 *.spec
 !platform/**/*.spec
 !buildozer.spec
 
-# Ignore release builds and executables
+# Release builds and executables
 releases/
 *.exe
 *.msi
 *.zip
 *.rar
 *.apk
+*.aab
 
-# Tools and notes (but not requirements.txt)
+# Local tools and notes (but not requirements.txt)
 *.txt
 *.ps1
 *.bat
@@ -46,8 +55,3 @@ releases/
 # Project-specific ignores
 Crap/
 audit/
-Logs/
-venv_kivy/
-
-# Ignore all hidden directories
-.*/
