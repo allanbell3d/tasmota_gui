@@ -5,6 +5,7 @@
 #
 # INSTALLATION:
 #   pip install -r requirements.txt
+#   (or, with pyproject.toml: pip install -e ".[desktop]" / ".[mobile]" / ".[dev]")
 #
 # NOTE: This app has two UI variants. Install dependencies based on your target:
 #   - Desktop (Windows/Linux/Mac): Uncomment PySide6

@@ -1,8 +1,15 @@
 # Windows Packaging
 
-This directory hosts helper assets for producing Windows builds of the desktop GUI.
-
-* `build_release_json_embeded.ps1` – convenience script that reads the project version from `constants.py` and runs PyInstaller against `apps/desktop.py`.
-* `tasmota-desktop.spec` – baseline PyInstaller spec file that bundles the desktop launcher and command library JSON.
-
-Run the PowerShell script from a developer prompt with Python and PyInstaller available to generate a standalone `.exe` in the `releases/` folder.
+* `tasmota-desktop.spec` – PyInstaller spec for the desktop launcher. Every
+  path is anchored to the repository root, so it builds from any directory:
+  ```bash
+  pyinstaller --clean platform/windows/tasmota-desktop.spec
+  ```
+  The result is `dist/TasmotaBulkGUI.exe`. It bundles the command library
+  JSON and the logo. If `.private/tasmota_settings.json` exists at build time,
+  it is bundled as the first-run default: such an `.exe` contains your
+  commands (including MQTT credentials) and web password, so don't share it.
+* Settings changed in the packaged app are saved to `.private/` next to the
+  `.exe`, or to `%APPDATA%\TasmotaBulkTool\` if that folder is not writable.
+* Local helper scripts such as `build_release_json_embeded.ps1` are
+  git-ignored (`*.ps1`) and are not part of the repository.

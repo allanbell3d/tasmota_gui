@@ -1,6 +1,6 @@
 # macOS Packaging (Placeholder)
 
-This directory is reserved for future macOS packaging assets. As of v0.1.9 the
+This directory is reserved for future macOS packaging assets. As of v0.3.0 the
 desktop PySide6 launcher (`apps/desktop.py`) remains the recommended entry point
 on macOS. When a native packaging workflow (e.g., PyInstaller, Briefcase, or
 Xcode project files) is introduced, document the required tooling and build

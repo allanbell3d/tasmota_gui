@@ -1,6 +1,6 @@
 # Android Packaging with Buildozer
 
-This project ships a Kivy entrypoint (`apps/mobile.py`) that mirrors the Compose UI from the previous Android prototype.  The Android package is generated with **Buildozer** so everything runs from the existing Python sources and the shared networking modules.
+This project ships a Kivy entrypoint (`apps/mobile.py`), started on Android through the root `main.py` (python-for-android requires a `main.py` at the app root).  The Android package is generated with **Buildozer** so everything runs from the existing Python sources and the shared networking modules.
 
 ## Prerequisites
 
@@ -24,7 +24,8 @@ This project ships a Kivy entrypoint (`apps/mobile.py`) that mirrors the Compose
 
 * `apps/mobile.py` – Kivy UI entrypoint used by the Android build.
 * `src/tasmota/core/` – shared discovery, command, and networking logic used by both the PySide6 and Kivy front-ends.
-* `platform/android/buildozer.spec` – Buildozer configuration (points to the Kivy entrypoint and includes Python dependencies).
+* `buildozer.spec` (repository root) – the only Buildozer configuration. `tests/`, `tools/`, `platform/` and `assets/reference/` are excluded from the APK.
+* `main.py` (repository root) – Android entry point that loads `apps/mobile.py`.
 
 ## First-Time Build
 
@@ -37,7 +38,7 @@ This project ships a Kivy entrypoint (`apps/mobile.py`) that mirrors the Compose
    buildozer android debug
    ```
    The first build downloads the Android SDK/NDK and all Python wheels, so it can take several minutes.
-3. The resulting debug APK is located in `bin/` (e.g., `bin/tasmotabulk-0.1.9-debug.apk`).
+3. The resulting debug APK is located in `bin/` (e.g., `bin/tasmotabulk-0.3.0-debug.apk`).
 
 ## Install on a Device or Emulator
 
@@ -58,6 +59,14 @@ buildozer android logcat
 * Modify Python dependencies inside `buildozer.spec` → `requirements`.
 * Update the application version or package name in the `[app]` section.
 * To perform a release build, run `buildozer android release` and sign the resulting AAB/APK as required.
+
+## Settings on Android
+
+Buildozer skips hidden folders, so `.private/` is never packaged. The app keeps
+its settings (IP ranges, commands, web password, options) in its private
+data folder (`App.user_data_dir`), which survives app updates. Enter your values once
+per device; they are saved when a run starts and when the app is paused or
+closed.
 
 ## Runtime defaults on Android
 

@@ -12,6 +12,92 @@ This project follows **semantic versioning**:
 
 ---
 
+## [v0.3.0] - 2026-10-21
+### Fixed
+- **Wrong firmware for ESP32 variants.** Every ESP32-family chip used to get
+  `tasmota32.bin`, and `ESP8685` (an ESP32-C3) got the ESP8266 image. The image
+  is now chosen from `StatusFWR.Hardware`: c2/c3/c5/c6/c61/s2/s3 and
+  single-core (solo1) chips get their own official image from the same release
+  folder. H2/P4/S31, bare "ESP32", unknown packages, cross-family URLs and
+  single-core mismatches are refused (`core/ota.py`).
+- **OTA reported success without checking.** OtaUrl must be echoed back by the
+  device before `Upgrade 1` is sent. A rejected `Upgrade 1` aborts at once and
+  restores the official OtaUrl. Minimal/safeboot images are waited through,
+  and the version is compared before and after. Each device's outcome is in
+  `DeviceResult.Action` and the export.
+- **Specialty builds** (sensors, ir, bluetooth, tasmota-4M, ...) were treated
+  as "not Tasmota" during discovery because their Version string lacks
+  "tasmota". They are now discovered, but skipped for OTA so they are not
+  replaced by the plain build.
+- **Command replies ignored.** HTTP 401, `{"WARNING": ...}` and
+  `Command Unknown` now count as failures. The failure reason for every
+  device that did not respond is reported (timeout, refused, 401, not
+  Tasmota).
+- **Backlog limits.** Commands are split into Backlog chunks of at most 30
+  commands / 1000 bytes (Tasmota rejects 1200+ byte commands). The executor
+  waits for each chunk to drain before sending the next, because older
+  firmware drops entries while its queue is full. Commands containing `;` or
+  starting with `Reset` are sent one by one.
+- **Commands could run twice.** After a read timeout, only read-only queries
+  are retried.
+- **Cancel during retry backoff** now takes effect immediately.
+- **Desktop selection:** "Toggle All" also ticked rows hidden by the filter;
+  the buttons are now "Toggle Visible ..." and only affect visible rows.
+- **Run results replaced the scan list** (desktop selection window, mobile OTA
+  panel); results are now merged.
+- **Closing the desktop window during a run** could destroy a running
+  QThread. Close now asks, cancels, and closes once the worker has stopped.
+- **Mobile:** log lines could be lost between worker threads and the UI;
+  invalid timeout/retries text such as "." raised an exception.
+- **Packaging:** `python apps/desktop.py` (and so PyInstaller) failed with
+  `No module named 'tasmota'`. The PyInstaller spec pointed at
+  `platform/windows/apps/desktop.py`, because PyInstaller resolves spec paths
+  relative to the spec. The Android build lacked the `main.py` that
+  python-for-android requires (removed in v0.2.2).
+
+### Added
+- **Web password** (`WebPassword`) support on desktop and mobile. It is only
+  sent to devices that reply with Tasmota's own 401, and never through
+  environment proxies.
+- **Private settings** (`core/settings.py`): IP ranges, commands, options and
+  password are saved to `.private/tasmota_settings.json` (or next to the
+  `.exe`, or the Android data folder). Saves are atomic and unknown keys are
+  kept; corrupt files are moved aside; a file that can't be read is never
+  overwritten.
+- `tools/migrate_settings_from_git.py` copies the values that used to be
+  hard-coded in `constants.py` into the settings file.
+- **Tests** (`tests/`, 86 tests with a fake Tasmota network), **CI** (GitHub
+  Actions: ruff + pytest on Python 3.10/3.12) and **`pyproject.toml`**
+  (extras `desktop`, `mobile`, `export`, `dev`).
+- Root `main.py` for Android; `apps/_bootstrap.py` so launchers run as scripts.
+
+### Changed
+- **Personal defaults removed from source:** `DEFAULT_IP_RANGES` is a neutral
+  example; `COMMAND_LIBRARY` (MQTT credentials, location, rules) was replaced
+  by an empty `DEFAULT_BACKLOG_COMMANDS`; `DEFAULT_COMMANDS` was removed from
+  `core/commands.py`.
+- `TasmotaBulkExecutor`: `cmd_ips=[]` / `fw_ips=[]` now mean "none" (only
+  `None` means "all selected"); new `web_password` and `transport`
+  parameters; `_send_cmd` returns a `CommandResult`.
+- PyInstaller spec builds from any directory and bundles the logo and the
+  optional settings seed. One `buildozer.spec` at the root; the unsupported
+  `source.main` key was removed; tests/tools/platform are excluded from the
+  APK.
+- Desktop thread limit uses `MAX_THREADS`; docs explain that
+  `DESKTOP_THREAD_MAX` applies to the Kivy UI on a desktop.
+- `tools/`: repo-relative paths with CLI arguments; parser renamed to
+  `tools/parse_tasmota_docs.py`.
+- `.gitignore`: no longer ignores every hidden folder (that blocked
+  `.github/`); ignores `.private/` explicitly.
+
+### Removed
+- Duplicate files: `tasmota_commands - Copy.json`, `- Copy (2).json`,
+  `tools/Commands.md`, `assets/reference/tasmota/Commands.md` (identical to
+  `commands_raw_2026-01-05_v15.2.0.md`), `platform/android/buildozer.spec`.
+- Unused imports flagged by ruff.
+
+---
+
 ## [v0.2.2] - 2026-01-06
 ### Added
 - **Comprehensive docstrings** for all core classes and public methods
