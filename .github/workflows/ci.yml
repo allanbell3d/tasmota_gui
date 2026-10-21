@@ -17,7 +17,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
         # Core + tests only; the PySide6/Kivy UIs are smoke-tested manually.
-        run: pip install httpx pandas openpyxl pytest ruff
+        run: pip install httpx pandas openpyxl pytest "ruff==0.16.*"
       - name: Lint
         run: ruff check .
       - name: Test

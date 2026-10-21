@@ -13,17 +13,19 @@ one core, so discovery, commands and firmware updates behave the same on both.
   - **Correct firmware for every chip.** ESP32-C2/C3/C5/C6/C61/S2/S3 and
     single-core ESP32 now get their own official image (`tasmota32c3.bin`,
     `tasmota32solo1.bin`, ...). Chips that can't be identified safely, and
-    devices running a specialty build (sensors, ir, bluetooth, ...), are
-    skipped rather than guessed.
+    devices running a specialty build (sensors, ir, bluetooth, ...; language
+    builds are recognised by their non-stock OtaUrl), are skipped rather than
+    guessed.
   - **Updates are verified.** OtaUrl and Upgrade replies are checked, the
     firmware version is compared before and after, and the outcome of every
     device appears in the log and in the new `Action` column of the export.
   - **Web password support.** The password is sent only to devices that ask
-    for it with Tasmota's own 401 reply, never to other hosts in the range.
+    for it with Tasmota's own "need user/password" reply (any language),
+    never to other hosts in the range. Password arguments are masked in the log.
   - **Your settings are remembered.** IP ranges, backlog commands, password and
     options are kept in a private, git-ignored settings file (see below).
-  - **Safer selection.** "Toggle Visible ..." buttons only affect rows shown by
-    the current filter.
+  - **Safer selection.** All toggle buttons in the selection window (all,
+    ESP82xx, ESP32) only affect rows shown by the current filter.
 
 See the [CHANGELOG](CHANGELOG.md) for the full list.
 
@@ -43,7 +45,8 @@ See the [CHANGELOG](CHANGELOG.md) for the full list.
 
 ## Quick Start
 ```bash
-pip install -e ".[desktop,dev]"   # or: pip install -r requirements.txt PySide6
+pip install -e ".[desktop,dev]"   # editable: assets/ stay in the checkout
+                                  # (or: pip install -r requirements.txt PySide6)
 
 # Desktop (PySide6)
 python -m apps.desktop            # python apps/desktop.py also works
@@ -82,6 +85,9 @@ pinned for one run never sticks.
   ```bash
   python tools/migrate_settings_from_git.py
   ```
+  The current code no longer contains them, but commits up to `1231279` still
+  do (MQTT user/password, location, IP ranges). They are only gone once the
+  history is rewritten or the repository is re-created.
 - A Windows build bundles `.private/tasmota_settings.json` as the first-run
   default if it exists at build time. That makes the `.exe` contain your
   commands (including MQTT credentials) and password, so don't share such a

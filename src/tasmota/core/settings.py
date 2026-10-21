@@ -33,6 +33,7 @@ kept when saving, so the file can carry notes (for example
 from __future__ import annotations
 
 import json
+import math
 import os
 import sys
 import time
@@ -46,6 +47,12 @@ from tasmota.constants import (
     DEFAULT_RETRIES,
     DEFAULT_THREADS,
     DEFAULT_TIMEOUT,
+    MAX_RETRIES,
+    MAX_THREADS,
+    MAX_TIMEOUT,
+    MIN_RETRIES,
+    MIN_THREADS,
+    MIN_TIMEOUT,
 )
 
 __all__ = [
@@ -106,11 +113,12 @@ class UserSettings:
         commands = data.get("commands")
         if isinstance(commands, list):
             settings.commands = [str(cmd) for cmd in commands if isinstance(cmd, str) and cmd.strip()]
-        settings.threads = _coerce(data.get("threads"), int, settings.threads)
-        settings.timeout = _coerce(data.get("timeout"), float, settings.timeout)
-        settings.retries = _coerce(data.get("retries"), int, settings.retries)
-        if data.get("info_mode") in ("lite", "full"):
-            settings.info_mode = data["info_mode"]
+        settings.threads = _coerce(data.get("threads"), int, settings.threads, MIN_THREADS, MAX_THREADS)
+        settings.timeout = _coerce(data.get("timeout"), float, settings.timeout, MIN_TIMEOUT, MAX_TIMEOUT)
+        settings.retries = _coerce(data.get("retries"), int, settings.retries, MIN_RETRIES, MAX_RETRIES)
+        info_mode = str(data.get("info_mode", "")).strip().lower()
+        if info_mode in ("lite", "full"):
+            settings.info_mode = info_mode
         if isinstance(data.get("output_dir"), str):
             settings.output_dir = data["output_dir"]
         if isinstance(data.get("web_password"), str):
@@ -119,14 +127,29 @@ class UserSettings:
         return settings
 
 
-def _coerce(value: Any, kind: type, default):
+def _coerce(value: Any, kind: type, default, low, high):
+    """Convert to ``kind`` and clamp to [low, high]; bad or non-finite -> default."""
     if isinstance(value, bool) or value is None:
         return default
     try:
-        coerced = kind(value)
-    except (TypeError, ValueError):
+        number = float(value)
+        if not math.isfinite(number):
+            return default
+        coerced = kind(number)
+    except (TypeError, ValueError, OverflowError):
         return default
-    return coerced if coerced > 0 else default
+    return max(low, min(coerced, high))
+
+
+def _decode(raw: bytes) -> str:
+    """Decode UTF-8 (with or without BOM) or BOM-marked UTF-16.
+
+    Notepad may add a UTF-8 BOM; Windows PowerShell 5.1 ``>`` / ``Out-File``
+    writes UTF-16LE with a BOM.
+    """
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return raw.decode("utf-16")
+    return raw.decode("utf-8-sig")
 
 
 def _project_root() -> Path:
@@ -172,7 +195,9 @@ class SettingsStore:
         meipass = getattr(sys, "_MEIPASS", None)
         if meipass:
             yield Path(meipass) / PRIVATE_DIR_NAME / SETTINGS_FILENAME
-        yield _project_root() / PRIVATE_DIR_NAME / SETTINGS_FILENAME
+        if not getattr(sys, "frozen", False):
+            # In a frozen build the "project root" would be a temp folder.
+            yield _project_root() / PRIVATE_DIR_NAME / SETTINGS_FILENAME
 
     def load(self) -> Tuple[UserSettings, Optional[str]]:
         """Return (settings, warning). Never raises.
@@ -185,8 +210,7 @@ class SettingsStore:
             if not path.is_file():
                 continue
             try:
-                # utf-8-sig: accept files saved by Notepad/PowerShell with a BOM.
-                text = path.read_text(encoding="utf-8-sig")
+                raw = path.read_bytes()
             except OSError as exc:
                 if path in self.candidate_paths:
                     self._save_blocked = f"settings file {path} could not be read earlier ({exc})"
@@ -195,6 +219,12 @@ class SettingsStore:
                     "changes will not be saved this session."
                 )
             try:
+                text, decode_error = _decode(raw), None
+            except UnicodeError as exc:
+                text, decode_error = None, exc
+            try:
+                if decode_error is not None:
+                    raise ValueError(f"not UTF-8/UTF-16 text: {decode_error}")
                 data = json.loads(text)
                 if not isinstance(data, dict):
                     raise ValueError("top level must be a JSON object")

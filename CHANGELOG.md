@@ -28,7 +28,12 @@ This project follows **semantic versioning**:
 - **Specialty builds** (sensors, ir, bluetooth, tasmota-4M, ...) were treated
   as "not Tasmota" during discovery because their Version string lacks
   "tasmota". They are now discovered, but skipped for OTA so they are not
-  replaced by the plain build.
+  replaced by the plain build. Language builds and tasmota32s2cdc report the
+  stock image name, so a device is also skipped when its current OtaUrl is
+  not a stock file name.
+- **Uncertain replies.** If `Upgrade 1` times out, the device may already be
+  updating: the tool keeps verifying instead of resetting OtaUrl (which
+  Tasmota reads a few seconds later).
 - **Command replies ignored.** HTTP 401, `{"WARNING": ...}` and
   `Command Unknown` now count as failures. The failure reason for every
   device that did not respond is reported (timeout, refused, 401, not
@@ -41,8 +46,8 @@ This project follows **semantic versioning**:
 - **Commands could run twice.** After a read timeout, only read-only queries
   are retried.
 - **Cancel during retry backoff** now takes effect immediately.
-- **Desktop selection:** "Toggle All" also ticked rows hidden by the filter;
-  the buttons are now "Toggle Visible ..." and only affect visible rows.
+- **Desktop selection:** "Toggle All" also ticked rows hidden by the filter.
+  All toggle buttons (visible, ESP82xx, ESP32) now only affect visible rows.
 - **Run results replaced the scan list** (desktop selection window, mobile OTA
   panel); results are now merged.
 - **Closing the desktop window during a run** could destroy a running
@@ -57,18 +62,22 @@ This project follows **semantic versioning**:
 
 ### Added
 - **Web password** (`WebPassword`) support on desktop and mobile. It is only
-  sent to devices that reply with Tasmota's own 401, and never through
-  environment proxies.
+  sent to devices that answer with Tasmota's "need user/password" warning
+  (translated in language builds; 401, or 200 on old firmware), and never
+  through environment proxies. Password arguments of commands such as
+  `MqttPassword` are masked in the log.
 - **Private settings** (`core/settings.py`): IP ranges, commands, options and
   password are saved to `.private/tasmota_settings.json` (or next to the
   `.exe`, or the Android data folder). Saves are atomic and unknown keys are
-  kept; corrupt files are moved aside; a file that can't be read is never
-  overwritten.
+  kept; values are clamped to the allowed ranges. UTF-8 (with or without BOM)
+  and UTF-16 files are read; files that aren't valid JSON are moved aside; a
+  file that can't be read is never overwritten.
 - `tools/migrate_settings_from_git.py` copies the values that used to be
   hard-coded in `constants.py` into the settings file.
-- **Tests** (`tests/`, 86 tests with a fake Tasmota network), **CI** (GitHub
+- **Tests** (`tests/`, 95 tests with a fake Tasmota network), **CI** (GitHub
   Actions: ruff + pytest on Python 3.10/3.12) and **`pyproject.toml`**
-  (extras `desktop`, `mobile`, `export`, `dev`).
+  (extras `desktop`, `mobile`, `export`, `dev`; use an editable install so
+  `assets/` is found).
 - Root `main.py` for Android; `apps/_bootstrap.py` so launchers run as scripts.
 
 ### Changed
@@ -83,6 +92,7 @@ This project follows **semantic versioning**:
   optional settings seed. One `buildozer.spec` at the root; the unsupported
   `source.main` key was removed; tests/tools/platform are excluded from the
   APK.
+- Desktop timeout accepts tenths of a second (matches the mobile field).
 - Desktop thread limit uses `MAX_THREADS`; docs explain that
   `DESKTOP_THREAD_MAX` applies to the Kivy UI on a desktop.
 - `tools/`: repo-relative paths with CLI arguments; parser renamed to

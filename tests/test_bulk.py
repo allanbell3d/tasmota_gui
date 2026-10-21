@@ -240,6 +240,9 @@ class OtaDevice:
         reject_upgrade=False,
         via_minimal=False,
         keep_ota_url=False,
+        current_ota_url=None,
+        upgrade_times_out=False,
+        stuck_minimal=False,
     ):
         self.hardware = hardware
         self.version = old
@@ -247,6 +250,9 @@ class OtaDevice:
         self.reject_upgrade = reject_upgrade
         self.via_minimal = via_minimal
         self.keep_ota_url = keep_ota_url
+        self.current_ota_url = current_ota_url
+        self.upgrade_times_out = upgrade_times_out
+        self.stuck_minimal = stuck_minimal
         self.upgraded = False
         self.polls = 0
 
@@ -255,11 +261,16 @@ class OtaDevice:
         if lower == "status 0":
             if self.via_minimal and self.version == "15.0.1(release-minimal)":
                 self.polls += 1
-                if self.polls > 1:
+                if self.polls > 1 and not self.stuck_minimal:
                     self.version = self.new
             return httpx.Response(200, json=status0(hardware=self.hardware, version=self.version))
         if lower.startswith("otaurl") and self.keep_ota_url:
-            return httpx.Response(200, json={"OtaUrl": "http://old/url.bin"})
+            return httpx.Response(200, json={"OtaUrl": "http://ota.tasmota.com/tasmota/release-14.0.0/tasmota.bin.gz"})
+        if lower == "otaurl" and self.current_ota_url is not None:
+            return httpx.Response(200, json={"OtaUrl": self.current_ota_url})
+        if lower == "upgrade 1" and self.upgrade_times_out:
+            self.upgraded = True
+            raise httpx.ReadTimeout("timed out", request=request)
         if lower == "upgrade 1":
             if self.reject_upgrade:
                 return httpx.Response(401, json={"WARNING": "Need user=<username>&password=<password>"})
@@ -372,3 +383,87 @@ def test_export_writes_files(network, tmp_path):
     assert result.rows_written == 1
     assert (tmp_path / result.xlsx_path.split("/")[-1]).exists()
     assert (tmp_path / result.csv_path.split("/")[-1]).exists()
+
+
+def test_localized_auth_warning_gets_password(network):
+    def german(cmd, request):
+        if request.url.params.get("password") == "pw":
+            return httpx.Response(200, json=status0())
+        return httpx.Response(401, json={"WARNING": "Benötige user=<Benutzername>&password=<Passwort>"})
+
+    network.add_device("10.0.0.5", handler=german)
+    assert make_executor(network, ["10.0.0.5"], web_password="pw").run().results[0].Ok
+
+
+def test_old_firmware_200_auth_warning_gets_password(network):
+    def old(cmd, request):
+        if request.url.params.get("password") == "pw":
+            return httpx.Response(200, json=status0())
+        return httpx.Response(200, json={"WARNING": "Need user=<username>&password=<password>"})
+
+    network.add_device("10.0.0.5", handler=old)
+    assert make_executor(network, ["10.0.0.5"], web_password="pw").run().results[0].Ok
+
+
+def test_upgrade_timeout_continues_without_touching_ota_url(network):
+    logs = []
+    pinned = {"ESP8266": "http://ota.tasmota.com/tasmota/release-15.0.0/tasmota.bin.gz"}
+    device = OtaDevice("ESP8266EX", old="14.0.0(release-tasmota)", new="15.0.1(release-tasmota)", upgrade_times_out=True)
+    result = run_ota(network, device, logs, ota_urls=pinned)
+    cmds = network.commands_for("10.0.0.9")
+    upgrade_at = cmds.index("Upgrade 1")
+    # No OtaUrl change right after the unanswered Upgrade 1; verified first.
+    assert cmds[upgrade_at + 1] == "Restart 1"
+    assert result.results[0].Action.startswith("OTA 14.0.0")
+    assert cmds[-1] == "OtaUrl http://ota.tasmota.com/tasmota/release/tasmota.bin.gz"
+
+
+def test_non_stock_current_ota_url_is_refused(network):
+    logs = []
+    device = OtaDevice(
+        "ESP32-D0WD-V3", current_ota_url="http://ota.tasmota.com/tasmota32/release/tasmota32-DE.bin"
+    )
+    result = run_ota(network, device, logs)
+    assert "Upgrade 1" not in network.commands_for("10.0.0.9")
+    assert "language" in result.results[0].Action
+
+
+def test_device_stuck_on_minimal_is_reported(network):
+    executor_logs = []
+    device = OtaDevice("ESP8266EX", old="14.0.0(release-tasmota)", via_minimal=True, stuck_minimal=True)
+    network.add_device("10.0.0.9", handler=device)
+    executor = make_executor(network, ["10.0.0.9"], executor_logs, do_upgrade=True, selected_ips=["10.0.0.9"])
+    executor.ota_verification_retries = 2
+    result = executor.run()
+    assert result.results[0].Action == "OTA failed: device stuck on the minimal image"
+
+
+def test_password_commands_masked_in_logs(network):
+    network.add_device("10.0.0.5")
+    logs = []
+    make_executor(
+        network,
+        ["10.0.0.5"],
+        logs,
+        send_backlog=True,
+        commands=["MqttPassword hunter2", "Rule1 a; b"],
+        selected_ips=["10.0.0.5"],
+    ).run()
+    assert "MqttPassword hunter2" in network.commands_for("10.0.0.5")
+    assert not any("hunter2" in line for _, line in logs)
+
+
+def test_pause_after_user_backlog_line(network):
+    network.add_device("10.0.0.5")
+    executor = make_executor(
+        network,
+        ["10.0.0.5"],
+        send_backlog=True,
+        commands=["Backlog Power on; Delay 10; Power off", "Rule1 x; y"],
+        selected_ips=["10.0.0.5"],
+    )
+    executor.backlog_seconds_per_command = 0.1
+    executor.backlog_chunk_margin = 0.0
+    started = time.monotonic()
+    executor.run()
+    assert time.monotonic() - started >= 0.3  # 3 queued entries x 0.1 s

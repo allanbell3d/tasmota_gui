@@ -89,20 +89,20 @@ def test_unreadable_file_is_not_overwritten(tmp_path, monkeypatch):
 
     path = tmp_path / SETTINGS_FILENAME
     path.write_text(json.dumps({"commands": ["Keep me"]}))
-    real_read = Path.read_text
+    real_read = Path.read_bytes
 
     def locked(self, *args, **kwargs):
         if self == path:
             raise PermissionError("locked by antivirus")
         return real_read(self, *args, **kwargs)
 
-    monkeypatch.setattr(Path, "read_text", locked)
+    monkeypatch.setattr(Path, "read_bytes", locked)
     store = SettingsStore(tmp_path)
     loaded, warning = store.load()
     assert warning and "will not be saved" in warning
     error = store.save(loaded)
     assert error and "not saved" in error
-    monkeypatch.setattr(Path, "read_text", real_read)
+    monkeypatch.setattr(Path, "read_bytes", real_read)
     assert json.loads(path.read_text())["commands"] == ["Keep me"]
 
 
@@ -156,3 +156,27 @@ def test_seed_not_read_from_arbitrary_parent_folders(tmp_path, monkeypatch):
     monkeypatch.delattr(sys, "_MEIPASS", raising=False)
     store = SettingsStore(tmp_path / "data")
     assert store.load()[0].commands == []
+
+
+def test_utf16_and_ansi_files_do_not_crash(tmp_path):
+    (tmp_path / SETTINGS_FILENAME).write_bytes(json.dumps({"ip_ranges": "1.2.3.4"}).encode("utf-16"))
+    loaded, warning = SettingsStore(tmp_path).load()
+    assert warning is None and loaded.ip_ranges == "1.2.3.4"
+
+    other = tmp_path / "ansi"
+    other.mkdir()
+    (other / SETTINGS_FILENAME).write_bytes('{"web_password": "pässword"}'.encode("cp1252"))
+    loaded, warning = SettingsStore(other).load()
+    assert warning and "Using defaults" in warning
+    assert list(other.glob(SETTINGS_FILENAME + ".corrupt-*"))
+
+
+def test_values_are_clamped_and_finite(tmp_path):
+    from tasmota.constants import MAX_THREADS, MAX_TIMEOUT
+
+    (tmp_path / SETTINGS_FILENAME).write_text('{"threads": 1e12, "timeout": Infinity, "retries": 0, "info_mode": "Full"}')
+    loaded, _ = SettingsStore(tmp_path).load()
+    assert loaded.threads == MAX_THREADS
+    assert loaded.timeout == UserSettings().timeout and loaded.timeout <= MAX_TIMEOUT
+    assert loaded.retries == 1
+    assert loaded.info_mode == "full"

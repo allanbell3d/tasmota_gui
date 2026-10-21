@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Callable, Dict, Optional
 
 from kivy.clock import Clock
@@ -34,8 +35,11 @@ def parse_number(text: str, kind: type, default):
     input_filter="float" still allows text such as "." or "1.2.3".
     """
     try:
-        value = kind(str(text).strip())
-    except (TypeError, ValueError):
+        number = float(str(text).strip())
+        if not math.isfinite(number):
+            return default
+        value = kind(number)
+    except (TypeError, ValueError, OverflowError):
         return default
     return value if value > 0 else default
 

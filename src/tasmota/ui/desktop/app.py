@@ -4,13 +4,14 @@ import html
 import os
 import sys
 import time
+from dataclasses import fields
 from typing import List, Optional, Tuple
 
 from PySide6.QtCore import Qt, QEvent, QObject, QThread
 from PySide6.QtGui import QColor, QTextCharFormat, QTextCursor, QFontMetrics
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QGroupBox, QPushButton, QTextEdit, QSpinBox, QFileDialog,
+    QGroupBox, QPushButton, QTextEdit, QSpinBox, QDoubleSpinBox, QFileDialog,
     QProgressBar, QMessageBox, QDialog, QLineEdit, QSizePolicy,
 )
 
@@ -101,8 +102,9 @@ class MainWindow(QWidget):
         ctl = QHBoxLayout()
         ctl.addWidget(QLabel("Threads:")); self.spin_threads = QSpinBox()
         self.spin_threads.setRange(1, MAX_THREADS); self.spin_threads.setValue(self.settings.threads); ctl.addWidget(self.spin_threads)
-        ctl.addWidget(QLabel("Timeout (s):")); self.spin_timeout = QSpinBox()
-        self.spin_timeout.setRange(1,120); self.spin_timeout.setValue(max(1, round(self.settings.timeout))); ctl.addWidget(self.spin_timeout)
+        ctl.addWidget(QLabel("Timeout (s):")); self.spin_timeout = QDoubleSpinBox()
+        self.spin_timeout.setDecimals(1); self.spin_timeout.setSingleStep(0.5)
+        self.spin_timeout.setRange(1, 120); self.spin_timeout.setValue(min(120.0, self.settings.timeout)); ctl.addWidget(self.spin_timeout)
         ctl.addWidget(QLabel("Retries:")); self.spin_retries = QSpinBox()
         self.spin_retries.setRange(1,10); self.spin_retries.setValue(self.settings.retries); ctl.addWidget(self.spin_retries)
         ctl.addWidget(QLabel("Web password:")); self.txt_password = QLineEdit(self.settings.web_password)
@@ -377,11 +379,12 @@ class MainWindow(QWidget):
             else:
                 self._merge_last_results(result)
             label = "Scan completed" if full_scan else "Run finished"
-            if result.xlsx_path:
+            exported = result.rows_written and result.xlsx_path and os.path.exists(result.xlsx_path)
+            if exported:
                 self.append_log(f"[INFO] {label}. Excel: {result.xlsx_path}", tag="INFO")
             else:
                 self.append_log(f"[INFO] {label}", tag="INFO")
-            if result.csv_path:
+            if exported and result.csv_path and os.path.exists(result.csv_path):
                 self.append_log(f"[INFO] CSV export: {result.csv_path}", tag="INFO")
             if full_scan:
                 self.append_log(f"[INFO] Results refreshed: {len(self.last_results)} devices", tag="INFO")
@@ -540,8 +543,16 @@ class MainWindow(QWidget):
         """Update devices touched by a run without dropping the rest of the scan."""
         by_ip = {r.IP: r for r in self.last_results}
         for device in result.results or []:
-            if device.Ok:
-                by_ip[device.IP] = device
+            if not device.Ok:
+                continue
+            previous = by_ip.get(device.IP)
+            if previous is not None:
+                # A lite run leaves full-scan fields (Uptime, OtaUrl...) empty;
+                # keep the earlier values instead of blanking them.
+                for field in fields(device):
+                    if field.name not in ("Error", "Action") and not getattr(device, field.name):
+                        setattr(device, field.name, getattr(previous, field.name))
+            by_ip[device.IP] = device
         self.last_results = sorted(by_ip.values(), key=lambda r: (r.Name or "").lower())
 
 # ============================

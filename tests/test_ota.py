@@ -100,3 +100,18 @@ def test_cross_family_urls_are_refused():
     swapped = {"ESP8266": OTA_URLS["ESP32"], "ESP32": OTA_URLS["ESP8266"]}
     assert resolve_ota_url("ESP8266EX", swapped)[0] is None
     assert resolve_ota_url("ESP32-D0WD-V3", swapped)[0] is None
+
+
+def test_classic_chip_refuses_variant_url():
+    urls = {"ESP32": "http://ota.tasmota.com/tasmota32/release/tasmota32c3.bin", "ESP8266": OTA_URLS["ESP8266"]}
+    assert resolve_ota_url("ESP32-D0WD-V3", urls)[0] is None
+
+
+def test_is_stock_ota_url():
+    from tasmota.core.ota import is_stock_ota_url
+
+    assert is_stock_ota_url("")
+    assert is_stock_ota_url("http://ota.tasmota.com/tasmota/release-15.0.0/tasmota.bin.gz")
+    assert is_stock_ota_url("http://ota.tasmota.com/tasmota32/release/tasmota32solo1.bin")
+    assert not is_stock_ota_url("http://ota.tasmota.com/tasmota/release/tasmota-DE.bin.gz")
+    assert not is_stock_ota_url("http://ota.tasmota.com/tasmota32/release/tasmota32s2cdc.bin")

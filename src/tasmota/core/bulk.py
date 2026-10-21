@@ -32,6 +32,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -48,6 +49,7 @@ __all__ = [
     "LogCallback",
     "ProgressCallback",
     "TasmotaBulkExecutor",
+    "mask_secrets",
     "split_backlog",
 ]
 
@@ -70,7 +72,7 @@ from tasmota.constants import (
     OTA_VERIFICATION_RETRIES,
     WEB_USERNAME,
 )
-from .ota import INTERMEDIATE_IMAGES, firmware_image, resolve_ota_url
+from .ota import INTERMEDIATE_IMAGES, firmware_image, is_stock_ota_url, resolve_ota_url
 from .utils import safe_extract_json
 
 LogCallback = Callable[[str, str], None]
@@ -79,6 +81,10 @@ ProgressCallback = Callable[[int, int], None]
 
 class _CancelledError(RuntimeError):
     """Raised inside a worker when the run is cancelled mid-request."""
+
+
+class _UnknownOutcome(RuntimeError):
+    """A command was sent but no reply arrived; it may have run."""
 
 
 class _AuthError(RuntimeError):
@@ -100,12 +106,38 @@ class CommandResult:
         data: Parsed JSON reply, or None.
         text: Raw reply body (empty on transport errors).
         error: Human-readable reason when ok is False.
+        uncertain: True when the command was sent but no reply arrived (e.g.
+            a read timeout): the device may have run it. Connection failures
+            and device replies are never uncertain.
     """
 
     ok: bool
     data: Any = None
     text: str = ""
     error: str = ""
+    uncertain: bool = False
+
+
+# Tasmota's "need password" warning is translated in language builds
+# ("Need user=<username>&password=<password>", "Benötige user=<Benutzername>
+# &password=<Passwort>", "Nécessite utilisateur=<username>&mot-de-passe=..."),
+# but always keeps the "=<...>&...=<" placeholder shape.
+_AUTH_WARNING_RE = re.compile(r"=<[^>]*>&[^=&]+=<")
+
+
+# Commands whose argument is a secret (Password1/2, MqttPassword, WebPassword).
+_SECRET_COMMAND_RE = re.compile(r"^(\s*(?:backlog\d?\s+)?)(\w*password\d*)(\s+)(\S.*?)(?=;|$)", re.IGNORECASE)
+
+
+def mask_secrets(command: str) -> str:
+    """Hide the argument of password commands for logging."""
+    parts = command.split(";")
+    return ";".join(_SECRET_COMMAND_RE.sub(lambda m: f"{m.group(1)}{m.group(2)}{m.group(3)}***", part) for part in parts)
+
+
+def _is_auth_warning(data: Any) -> bool:
+    warning = data.get("WARNING") if isinstance(data, dict) else None
+    return isinstance(warning, str) and bool(_AUTH_WARNING_RE.search(warning))
 
 
 def _reply_error(data: Any) -> str:
@@ -473,8 +505,9 @@ class TasmotaBulkExecutor:
         """GET with retries.
 
         Connection failures are always retried (the request never reached the
-        device). Other failures (read timeout, broken reply) are retried only
-        for read-only queries: a command might already have run.
+        device). Other failures (read timeout, broken reply, HTTP errors) are
+        retried only for read-only queries: a command might already have run.
+        Raises _UnknownOutcome when a non-read-only command may have run.
         """
         last_error = ""
         for attempt in range(1, self.retries + 1):
@@ -487,16 +520,21 @@ class TasmotaBulkExecutor:
             except Exception as exc:  # pragma: no cover - network errors vary
                 last_error = self._redact(str(exc)) or type(exc).__name__
                 if not idempotent:
-                    raise RuntimeError(f"{last_error} (not retried, the device may have run it)") from None
+                    raise _UnknownOutcome(f"{last_error} (not retried, the device may have run it)") from None
             else:
-                if response.status_code == 200:
+                reply = safe_extract_json(response.text) if response.status_code in (200, 401) else None
+                if response.status_code == 200 and not _is_auth_warning(reply):
                     return response
-                if response.status_code == 401:
-                    # Retrying will not fix a wrong or missing password.
-                    reply = safe_extract_json(response.text)
-                    warning = reply.get("WARNING", "") if isinstance(reply, dict) else ""
-                    raise _AuthError("HTTP 401", tasmota=str(warning).startswith("Need user"))
+                if response.status_code in (200, 401):
+                    # 401 (or 200 + "need user/password" on old firmware):
+                    # retrying will not fix a wrong or missing password. Any
+                    # JSON WARNING body means the host is Tasmota.
+                    is_tasmota = isinstance(reply, dict) and isinstance(reply.get("WARNING"), str)
+                    raise _AuthError("HTTP 401", tasmota=is_tasmota)
                 last_error = f"HTTP {response.status_code}"
+                if not idempotent:
+                    # The device answered, so it did not run the command.
+                    raise RuntimeError(last_error)
             if attempt < self.retries:
                 if self._interruptible_sleep((2 ** (attempt - 1)) * self.backoff):
                     raise _CancelledError("Cancelled")
@@ -504,7 +542,7 @@ class TasmotaBulkExecutor:
 
     @staticmethod
     def _is_read_only(command: str) -> bool:
-        return command.strip().lower() in ("status 0", "status 5", "template")
+        return command.strip().lower() in ("status 0", "status 5", "template", "otaurl")
 
     def _send_cmd(self, client: httpx.Client, ip: str, command: str) -> CommandResult:
         """Send one command via Tasmota's ``/cm`` endpoint. Never raises.
@@ -534,6 +572,8 @@ class TasmotaBulkExecutor:
                     self._auth_ips.add(ip)
                 use_auth = True
                 continue
+            except _UnknownOutcome as exc:
+                return CommandResult(ok=False, error=str(exc), uncertain=True)
             except Exception as exc:
                 return CommandResult(ok=False, error=self._redact(str(exc)))
             data = safe_extract_json(response.text)
@@ -578,7 +618,15 @@ class TasmotaBulkExecutor:
                 self._log(ip, name, "Command sending cancelled", tag="WARN")
                 return False
             if chunks is None:
-                self._log(ip, name, f"Command: {request}", tag="CMD")
+                self._log(ip, name, f"Command: {mask_secrets(request)}", tag="CMD")
+                previous = requests[index - 1] if index > 0 else ""
+                if previous.strip().lower().startswith("backlog"):
+                    # A user-written Backlog line runs from the device queue;
+                    # wait for it so this command does not overtake it.
+                    queued = previous.count(";") + 1
+                    if self._interruptible_sleep(queued * self.backlog_seconds_per_command + self.backlog_chunk_margin):
+                        self._log(ip, name, "Command sending cancelled", tag="WARN")
+                        return False
             elif index > 0:
                 # Let the previous chunk drain before queueing the next one.
                 queued = requests[index - 1].count("; ") + 1
@@ -589,7 +637,7 @@ class TasmotaBulkExecutor:
             result = self._send_cmd(client, ip, request)
             if not result.ok:
                 all_ok = False
-                self._log(ip, name, f"Command failed ({result.error}): {request[:80]}", tag="ERROR")
+                self._log(ip, name, f"Command failed ({result.error}): {mask_secrets(request)[:80]}", tag="ERROR")
         if all_ok:
             self._log(ip, name, f"Commands accepted{context}", tag="CMD")
         return all_ok
@@ -685,7 +733,7 @@ class TasmotaBulkExecutor:
         """Set OtaUrl and confirm the device stored it. Returns an error or ""."""
         reply = self._send_cmd(client, ip, f"OtaUrl {url}")
         if not reply.ok:
-            return reply.error
+            return reply.error + (" (it may have been stored)" if reply.uncertain else "")
         stored = reply.data.get("OtaUrl") if isinstance(reply.data, dict) else None
         if stored != url:
             # Tasmota keeps the old value when the text does not fit.
@@ -719,16 +767,33 @@ class TasmotaBulkExecutor:
             self._log(ip, name, f"OTA skipped: {problem}", tag="ERROR")
             return False, f"OTA skipped: {problem}", None
 
+        current = self._send_cmd(client, ip, "OtaUrl")
+        current_url = current.data.get("OtaUrl", "") if isinstance(current.data, dict) else ""
+        if current.ok and not is_stock_ota_url(current_url):
+            problem = (
+                f"device's OtaUrl is {current_url}, not a stock image; it probably runs a language or "
+                "special build that the stock URLs would replace. Update it manually"
+            )
+            self._log(ip, name, f"OTA skipped: {problem}", tag="ERROR")
+            return False, f"OTA skipped: {problem}", None
+
         self._log(ip, name, f"Sending OTA upgrade ({hardware}): {ota_url}", tag="OTA")
         error = self._set_ota_url(client, ip, ota_url)
         if error:
             self._log(ip, name, f"OTA aborted, OtaUrl not accepted: {error}", tag="ERROR")
+            # Nothing was started, so putting the official URL back is safe.
+            self._restore_default_ota_url(client, ip, name, hardware)
             return False, f"OTA aborted: OtaUrl not accepted ({error})", None
         reply = self._send_cmd(client, ip, "Upgrade 1")
-        if not reply.ok:
+        if not reply.ok and not reply.uncertain:
+            # The device answered and refused: no update is running.
             self._log(ip, name, f"OTA aborted, Upgrade 1 not accepted: {reply.error}", tag="ERROR")
             self._restore_default_ota_url(client, ip, name, hardware)
             return False, f"OTA aborted: Upgrade 1 not accepted ({reply.error})", None
+        if reply.uncertain:
+            # No reply, but the device may already be updating: do not touch
+            # OtaUrl now (Tasmota reads it a few seconds after Upgrade 1).
+            self._log(ip, name, f"No reply to Upgrade 1 ({reply.error}); verifying anyway", tag="WARN")
         upgrade_reply = reply.data.get("Upgrade") if isinstance(reply.data, dict) else None
         if upgrade_reply:
             self._log(ip, name, f"Device replied: {upgrade_reply}", tag="OTA")
@@ -741,6 +806,7 @@ class TasmotaBulkExecutor:
         self._log(ip, name, "Sending Restart 1", tag="OTA")
         self._send_cmd(client, ip, "Restart 1")
 
+        stuck_on = None
         for _ in range(self.ota_verification_retries):
             if self._interruptible_sleep(max(1, self.ota_verification_interval)):
                 self._log(ip, name, f"OTA verification cancelled by user; {pinned_note}", tag="WARN")
@@ -751,7 +817,9 @@ class TasmotaBulkExecutor:
             image = firmware_image(result.Version)
             if image in INTERMEDIATE_IMAGES:
                 # ESP8266 two-step update: minimal fetches the final image next.
-                self._log(ip, name, f"Device is on the {image} image, waiting for the final firmware", tag="OTA")
+                if stuck_on != image:
+                    self._log(ip, name, f"Device is on the {image} image, waiting for the final firmware", tag="OTA")
+                stuck_on = image
                 continue
             if result.Version == info.Version:
                 action = f"OTA: firmware unchanged ({result.Version})"
@@ -766,6 +834,9 @@ class TasmotaBulkExecutor:
                 self._log(ip, name, f"Firmware updated: {info.Version} -> {result.Version}", tag="OTA")
             self._restore_default_ota_url(client, ip, name, hardware)
             return True, action, result
+        if stuck_on:
+            self._log(ip, name, f"Device is online but still on the {stuck_on} image; {pinned_note}", tag="ERROR")
+            return False, f"OTA failed: device stuck on the {stuck_on} image", None
         self._log(ip, name, f"Device did not come back online after OTA; {pinned_note}", tag="ERROR")
         return False, "OTA failed: device did not come back online", None
 

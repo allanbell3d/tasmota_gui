@@ -68,9 +68,13 @@ src/tasmota/
   - Query devices (`Status 0`, optional `Status 5` / `Template`) via `/cm?cmnd=`
   - Check every reply: HTTP 401, `{"WARNING": ...}` and
     `{"Command":"Unknown"}` count as failures (`CommandResult`)
-  - Retry connection failures; retry read failures only for read-only queries
-  - Send the web password only to devices that answered with Tasmota's own
-    401 reply; never through environment proxies (`trust_env=False`)
+  - With `retries > 1`: retry connection failures for every command; retry
+    read timeouts and HTTP errors only for read-only queries (a command
+    might already have run). A sent command with no reply is marked
+    `uncertain`
+  - Send the web password only to devices that answered with Tasmota's
+    "need user/password" warning (any language); never through environment
+    proxies (`trust_env=False`); mask password arguments in logs
 - **Key Classes / functions:**
   - `TasmotaBulkExecutor._send_cmd()` - one command, never raises
   - `split_backlog()` - Backlog chunks of at most 30 commands / 1000 bytes
@@ -83,9 +87,11 @@ src/tasmota/
 - **Implementation:** `src/tasmota/core/bulk.py`
 - **Responsibilities:**
   - Run up to `threads` devices in parallel; cancellation wakes every wait
-  - OTA flow: set and confirm OtaUrl -> `Upgrade 1` -> wait -> `Restart 1` ->
-    poll until the final image runs (minimal/safeboot are skipped) -> compare
-    versions -> restore the official OtaUrl
+  - OTA flow: check the device's current OtaUrl is a stock file -> set and
+    confirm OtaUrl -> `Upgrade 1` -> wait -> `Restart 1` -> poll until the final
+    image runs (minimal/safeboot are skipped) -> compare versions -> restore the
+    official OtaUrl. A refused `Upgrade 1` restores at once; an unanswered one
+    is verified like a successful one
   - Record the outcome per device in `DeviceResult.Action`
 - **Key Classes:**
   - `TasmotaBulkExecutor` - Main executor class
@@ -109,8 +115,8 @@ src/tasmota/
 - **Responsibilities:**
   - Load/save `UserSettings` as JSON in `.private/` (source), next to the
     `.exe` (packaged) or the Android data folder
-  - Atomic writes, keep unknown keys, move corrupt files aside, never
-    overwrite a file that could not be read
+  - Atomic writes, keep unknown keys, clamp values, read UTF-8/UTF-16, move
+    invalid files aside, never overwrite a file that could not be read
 
 ### 7. Data Agent
 - **Role:** Reporting and data export

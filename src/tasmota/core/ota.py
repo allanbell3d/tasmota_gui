@@ -24,6 +24,10 @@ image does not boot on a single-core chip).
 ``"15.0.1(release-solo1)single-core"`` (``GetCodeCores()``). Devices
 running a specialty image (sensors, ir, bluetooth, ...) are refused, because
 the stock URLs would silently replace that build with the plain one.
+Language builds (tasmota-DE...) and tasmota32s2cdc report a stock image name,
+so the executor also refuses devices whose current OtaUrl is not a stock file
+name (``is_stock_ota_url``). Such a build with a stock OtaUrl cannot be told
+apart from the plain one.
 """
 
 from __future__ import annotations
@@ -40,6 +44,7 @@ __all__ = [
     "chip_family",
     "esp32_variant",
     "firmware_image",
+    "is_stock_ota_url",
     "resolve_ota_url",
 ]
 
@@ -59,6 +64,8 @@ _DUAL_CORE_PREFIXES = ("ESP32-D0WD", "ESP32-D2WD", "ESP32-PICO", "ESP32-U4WDH-D"
 # etc. envs keep "tasmota32", tasmota32solo1 sets "solo1".
 _STOCK_IMAGES = {"tasmota", "tasmota32", "solo1"}
 INTERMEDIATE_IMAGES = {"minimal", "safeboot"}
+# File names of the stock release images (ota.tasmota.com).
+_STOCK_FILE_RE = re.compile(r"^(tasmota\.bin(\.gz)?|tasmota32(c2|c3|c5|c6|c61|s2|s3|solo1)?\.bin)$", re.IGNORECASE)
 _VERSION_IMAGE_RE = re.compile(r"\((?:[^)]*?-)?([a-z0-9][a-z0-9-]*)\)", re.IGNORECASE)
 # Variants with a matching tasmota32<variant>.bin on ota.tasmota.com.
 _SUPPORTED_VARIANTS = {"c2", "c3", "c5", "c6", "c61", "s2", "s3", "solo1"}
@@ -118,6 +125,19 @@ def firmware_image(version: str) -> Optional[str]:
     return match.group(1).lower()
 
 
+def is_stock_ota_url(url: str) -> bool:
+    """True if ``url`` is empty or names a stock image file (any folder).
+
+    Language builds (tasmota-DE, tasmota32-DE) and tasmota32s2cdc report the
+    stock image name in their Version, so the device's current OtaUrl is the
+    only hint that it runs something else.
+    """
+    url = str(url or "").strip()
+    if not url:
+        return True
+    return bool(_STOCK_FILE_RE.match(_basename(url)))
+
+
 def _with_variant_image(url: str, variant: str) -> Optional[str]:
     """Swap a stock ``tasmota32.bin`` file name for ``tasmota32<variant>.bin``."""
     parts = urlsplit(url)
@@ -171,6 +191,8 @@ def resolve_ota_url(hardware: str, urls: Mapping[str, str], version: str = "") -
     if name.startswith("tasmota") and not name.startswith("tasmota32"):
         return None, f"ESP32 OTA URL points to an ESP8266 image: {base}"
     variant = esp32_variant(hardware) or ""
+    if not variant and _STOCK_FILE_RE.match(name) and name != "tasmota32.bin":
+        return None, f"ESP32 OTA URL names a variant image ({name}) but chip '{hardware}' is a classic ESP32"
     if variant == "unknown":
         return None, f"Cannot tell single- from dual-core for chip '{hardware}', update it manually"
     single_core_build = image == "solo1" or "single-core" in str(version).lower()
