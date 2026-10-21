@@ -62,23 +62,75 @@ def test_non_default_official_builds_are_detected(network, version):
     assert make_executor(network, ["10.0.0.5"]).run().results[0].Ok
 
 
-def test_auth_failure_is_not_retried_and_password_not_logged(network):
-    def needs_auth(cmd, request):
-        if request.url.params.get("password") == "s3cret":
-            return httpx.Response(200, json=status0())
-        return httpx.Response(401, json={"WARNING": "Need user=<username>&password=<password>"})
+TASMOTA_401 = {"WARNING": "Need user=<username>&password=<password>"}
 
-    network.add_device("10.0.0.5", handler=needs_auth)
-    logs = []
-    result = make_executor(network, ["10.0.0.5"], logs, retries=3).run()
-    assert "HTTP 401" in result.results[0].Error
+
+def needs_password(password="s3cret"):
+    def handler(cmd, request):
+        if request.url.params.get("password") == password:
+            return httpx.Response(200, json=status0())
+        return httpx.Response(401, json=TASMOTA_401)
+
+    return handler
+
+
+def test_auth_failure_is_not_retried(network):
+    network.add_device("10.0.0.5", handler=needs_password())
+    result = make_executor(network, ["10.0.0.5"], retries=3).run()
+    assert result.results[0].Error == "HTTP 401 (device needs a web password)"
     assert len(network.log) == 1  # 401 is not retried
 
     network.log.clear()
-    result = make_executor(network, ["10.0.0.5"], logs, web_password="s3cret").run()
-    assert result.results[0].Ok
-    assert network.log[0][2]["user"] == "admin"
-    assert all("s3cret" not in line for _, line in logs)
+    result = make_executor(network, ["10.0.0.5"], retries=3, web_password="wrong").run()
+    assert result.results[0].Error == "HTTP 401 (wrong web password)"
+    assert len(network.log) == 2  # one plain request, one with the password
+
+
+def test_password_only_sent_to_devices_that_ask_for_it(network):
+    network.add_device("10.0.0.5", handler=needs_password())
+    network.add_device("10.0.0.6")  # open Tasmota device
+    network.add_device("10.0.0.7", handler=lambda cmd, req: httpx.Response(401, text="router login"))
+    result = make_executor(network, ["10.0.0.5", "10.0.0.6", "10.0.0.7", "10.0.0.8"], web_password="s3cret").run()
+    by_ip = {r.IP: r for r in result.results}
+    assert by_ip["10.0.0.5"].Ok and by_ip["10.0.0.6"].Ok
+    assert by_ip["10.0.0.7"].Error == "HTTP 401 (not a Tasmota device?)"
+    sent_password = {host for host, _, params in network.log if "password" in params}
+    assert sent_password == {"10.0.0.5"}
+    assert [p.get("user") for h, _, p in network.log if h == "10.0.0.5"] == [None, "admin"]
+
+
+def test_password_redacted_from_exception_text(network):
+    def leaky(cmd, request):
+        if "password" in request.url.params:
+            raise httpx.ReadError(f"boom while reading {request.url}")
+        return httpx.Response(401, json=TASMOTA_401)
+
+    network.add_device("10.0.0.5", handler=leaky)
+    logs = []
+    result = make_executor(network, ["10.0.0.5"], logs, web_password="s3cret!").run()
+    assert "boom" in result.results[0].Error
+    everything = result.results[0].Error + " ".join(line for _, line in logs)
+    assert "s3cret" not in everything
+
+
+def test_status_retried_after_server_error(network):
+    replies = iter([httpx.Response(500), httpx.Response(200, json=status0())])
+    network.add_device("10.0.0.5", handler=lambda cmd, req: next(replies))
+    assert make_executor(network, ["10.0.0.5"], retries=2).run().results[0].Ok
+
+
+def test_commands_not_retried_after_read_timeout(network):
+    def handler(cmd, request):
+        if cmd == "Status 0":
+            return httpx.Response(200, json=status0())
+        raise httpx.ReadTimeout("timed out", request=request)
+
+    network.add_device("10.0.0.5", handler=handler)
+    result = make_executor(
+        network, ["10.0.0.5"], retries=3, send_backlog=True, commands=["Power on"], selected_ips=["10.0.0.5"]
+    ).run()
+    assert network.commands_for("10.0.0.5").count("Backlog Power on") == 1
+    assert result.results[0].Action == "commands failed (see log)"
 
 
 def test_command_encoding_matches_tasmota_expectation(network):
@@ -106,6 +158,25 @@ def test_split_backlog_chunks_by_count_and_length():
 def test_split_backlog_refuses_semicolons_and_oversized():
     assert split_backlog(["Power on", "Rule1 on x do backlog a; b endon"]) is None
     assert split_backlog(["Rule1 " + "x" * 2000]) is None
+    assert split_backlog(["Power on", "Reset 99"]) is None  # Tasmota drops Reset in Backlog
+    # Length is counted in UTF-8 bytes, as Tasmota does.
+    assert split_backlog(["DeviceName " + "\u00fc" * 600]) is None
+
+
+def test_multi_chunk_backlog_waits_between_chunks(network):
+    network.add_device("10.0.0.5")
+    commands = [f"SetOption{i} 1" for i in range(35)]
+    executor = make_executor(
+        network, ["10.0.0.5"], send_backlog=True, commands=commands, selected_ips=["10.0.0.5"]
+    )
+    executor.backlog_seconds_per_command = 0.01
+    executor.backlog_chunk_margin = 0.0
+    started = time.monotonic()
+    result = executor.run()
+    sent = network.commands_for("10.0.0.5")[1:]
+    assert len(sent) == 2 and sent[0].count("; ") == 29 and sent[1].count("; ") == 4
+    assert time.monotonic() - started >= 0.3  # 30 queued commands x 0.01 s
+    assert result.results[0].Action == "commands accepted"
 
 
 def test_commands_sent_individually_in_order_when_semicolons(network):
@@ -115,6 +186,19 @@ def test_commands_sent_individually_in_order_when_semicolons(network):
         network, ["10.0.0.5"], send_backlog=True, commands=cmds, selected_ips=["10.0.0.5"]
     ).run()
     assert network.commands_for("10.0.0.5")[1:] == cmds
+
+
+def test_command_unknown_reported_in_action(network):
+    def handler(cmd, request):
+        if cmd.startswith("Backlog"):
+            return httpx.Response(200, json={"Command": "Unknown"})
+        return httpx.Response(200, json=status0())
+
+    network.add_device("10.0.0.5", handler=handler)
+    result = make_executor(
+        network, ["10.0.0.5"], send_backlog=True, commands=["Bogus 1"], selected_ips=["10.0.0.5"]
+    ).run()
+    assert result.results[0].Action == "commands failed (see log)"
 
 
 def test_command_warning_is_reported_as_failure(network):
@@ -148,17 +232,34 @@ def test_empty_cmd_ips_means_no_devices(network):
 class OtaDevice:
     """Device that reports a new version once it has been restarted."""
 
-    def __init__(self, hardware, old="14.0.0(release-tasmota32)", new="15.0.1(release-tasmota32)", reject_upgrade=False):
+    def __init__(
+        self,
+        hardware,
+        old="14.0.0(release-tasmota32)",
+        new="15.0.1(release-tasmota32)",
+        reject_upgrade=False,
+        via_minimal=False,
+        keep_ota_url=False,
+    ):
         self.hardware = hardware
         self.version = old
         self.new = new
         self.reject_upgrade = reject_upgrade
+        self.via_minimal = via_minimal
+        self.keep_ota_url = keep_ota_url
         self.upgraded = False
+        self.polls = 0
 
     def __call__(self, cmd, request):
         lower = cmd.lower()
         if lower == "status 0":
+            if self.via_minimal and self.version == "15.0.1(release-minimal)":
+                self.polls += 1
+                if self.polls > 1:
+                    self.version = self.new
             return httpx.Response(200, json=status0(hardware=self.hardware, version=self.version))
+        if lower.startswith("otaurl") and self.keep_ota_url:
+            return httpx.Response(200, json={"OtaUrl": "http://old/url.bin"})
         if lower == "upgrade 1":
             if self.reject_upgrade:
                 return httpx.Response(401, json={"WARNING": "Need user=<username>&password=<password>"})
@@ -166,7 +267,7 @@ class OtaDevice:
             return httpx.Response(200, json={"Upgrade": f"Version {self.new} from ..."})
         if lower == "restart 1":
             if self.upgraded:
-                self.version = self.new
+                self.version = "15.0.1(release-minimal)" if self.via_minimal else self.new
             return httpx.Response(200, json={"Restart": "Restarting"})
         return httpx.Response(200, json={cmd.split(" ")[0]: cmd.partition(" ")[2]})
 
@@ -188,19 +289,53 @@ def test_ota_uses_variant_image_and_restores_variant_default(network):
     assert any("Firmware updated: 14.0.0" in line for _, line in logs)
 
 
+def test_ota_result_reports_new_version(network):
+    result = run_ota(network, OtaDevice("ESP8266EX", old="14.0.0(release-tasmota)", new="15.0.1(release-tasmota)"), [])
+    device = result.results[0]
+    assert device.Version == "15.0.1(release-tasmota)"
+    assert device.Action == "OTA 14.0.0(release-tasmota) -> 15.0.1(release-tasmota)"
+
+
 def test_ota_warns_when_version_unchanged(network):
     logs = []
-    run_ota(network, OtaDevice("ESP8266EX", new="14.0.0(release-tasmota32)"), logs)
+    result = run_ota(network, OtaDevice("ESP8266EX", old="14.0.0(release-tasmota)", new="14.0.0(release-tasmota)"), logs)
     assert any(tag == "WARN" and "firmware unchanged" in line for tag, line in logs)
+    assert result.results[0].Action.startswith("OTA: firmware unchanged")
 
 
-def test_ota_aborts_without_waiting_when_upgrade_rejected(network):
+def test_ota_waits_through_minimal_image(network):
     logs = []
-    network_device = OtaDevice("ESP8266EX", reject_upgrade=True)
-    run_ota(network, network_device, logs)
+    device = OtaDevice("ESP8266EX", old="14.0.0(release-tasmota)", new="15.0.1(release-tasmota)", via_minimal=True)
+    result = run_ota(network, device, logs)
+    assert any("minimal image" in line for _, line in logs)
+    assert result.results[0].Version == "15.0.1(release-tasmota)"
+    # OtaUrl is only restored once the final firmware is running.
+    cmds = network.commands_for("10.0.0.9")
+    assert cmds[-1].startswith("OtaUrl") and cmds[-2] == "Status 0"
+
+
+def test_ota_aborts_when_device_keeps_old_ota_url(network):
+    logs = []
+    result = run_ota(network, OtaDevice("ESP8266EX", old="14.0.0(release-tasmota)", keep_ota_url=True), logs)
+    assert "Upgrade 1" not in network.commands_for("10.0.0.9")
+    assert result.results[0].Action.startswith("OTA aborted: OtaUrl not accepted")
+
+
+def test_ota_rejected_upgrade_restores_default_url(network):
+    logs = []
+    pinned = {"ESP8266": "http://ota.tasmota.com/tasmota/release-15.0.0/tasmota.bin.gz"}
+    run_ota(network, OtaDevice("ESP8266EX", old="14.0.0(release-tasmota)", reject_upgrade=True), logs, ota_urls=pinned)
     cmds = network.commands_for("10.0.0.9")
     assert "Restart 1" not in cmds
+    assert cmds[-1] == "OtaUrl http://ota.tasmota.com/tasmota/release/tasmota.bin.gz"
     assert any(tag == "ERROR" and "Upgrade 1 not accepted" in line for tag, line in logs)
+
+
+def test_ota_refuses_specialty_build(network):
+    logs = []
+    result = run_ota(network, OtaDevice("ESP8266EX", old="15.0.1(release-sensors)"), logs)
+    assert not any(c.startswith("OtaUrl") for c in network.commands_for("10.0.0.9"))
+    assert "sensors" in result.results[0].Action
 
 
 def test_ota_refuses_unsupported_chip(network):

@@ -5,21 +5,25 @@ options) live in a JSON file instead of the source code. The apps load it on
 start and save it whenever a run starts and when they close, so values are
 entered once and remembered.
 
-Where the file lives (first match wins for reading; saving uses the first
-writable directory):
+Where the file lives (first existing file wins for reading; saving goes back
+to the file that was read, otherwise to the first writable directory):
 
-1. ``$TASMOTA_GUI_SETTINGS_DIR`` if set.
-2. An explicit directory passed by the caller (the Android app passes its
+1. An explicit directory passed by the caller (the Android app passes its
    private ``user_data_dir``).
+2. ``$TASMOTA_GUI_SETTINGS_DIR`` if set.
 3. Running from source: ``<project root>/.private/``.
    Packaged executable: ``<folder of the .exe>/.private/``.
 4. Fallback if the above is not writable: ``%APPDATA%/TasmotaBulkTool`` on
    Windows, ``~/.config/tasmota_bulk_tool`` elsewhere.
 
-If no settings file exists yet, a bundled seed is used when present: a
-``.private/tasmota_settings.json`` next to the bundled assets (the PyInstaller
-spec copies it into the executable). Otherwise the neutral defaults in
+If no settings file exists yet, a bundled seed is used when present:
+``.private/tasmota_settings.json`` inside the PyInstaller bundle (the spec
+copies it in) or in the project root. Otherwise the neutral defaults in
 ``tasmota.constants`` apply.
+
+A file that exists but cannot be read (locked by antivirus or a sync client)
+blocks saving for the session, so the real file is never replaced by
+defaults.
 
 The ``.private/`` folder is git-ignored. Keys this module does not know are
 kept when saving, so the file can carry notes (for example
@@ -43,7 +47,6 @@ from tasmota.constants import (
     DEFAULT_THREADS,
     DEFAULT_TIMEOUT,
 )
-from tasmota.core.utils import candidate_asset_roots
 
 __all__ = [
     "ENV_SETTINGS_DIR",
@@ -149,13 +152,14 @@ class SettingsStore:
 
     def __init__(self, directory: Optional[os.PathLike] = None) -> None:
         env_dir = os.environ.get(ENV_SETTINGS_DIR)
-        if env_dir:
-            self._dirs = [Path(env_dir)]
-        elif directory is not None:
+        if directory is not None:
             self._dirs = [Path(directory)]
+        elif env_dir:
+            self._dirs = [Path(env_dir)]
         else:
             self._dirs = [_primary_dir(), _fallback_dir()]
         self.loaded_from: Optional[Path] = None
+        self._save_blocked: Optional[str] = None
 
     @property
     def candidate_paths(self) -> List[Path]:
@@ -163,51 +167,70 @@ class SettingsStore:
 
     @staticmethod
     def _seed_paths() -> Iterable[Path]:
-        seen = set()
-        for root in candidate_asset_roots(Path(__file__).resolve()):
-            if root in seen:
-                continue
-            seen.add(root)
-            yield root / PRIVATE_DIR_NAME / SETTINGS_FILENAME
+        # Only the PyInstaller bundle and the project root - never arbitrary
+        # parent folders, where anyone could plant a settings file.
+        meipass = getattr(sys, "_MEIPASS", None)
+        if meipass:
+            yield Path(meipass) / PRIVATE_DIR_NAME / SETTINGS_FILENAME
+        yield _project_root() / PRIVATE_DIR_NAME / SETTINGS_FILENAME
 
     def load(self) -> Tuple[UserSettings, Optional[str]]:
         """Return (settings, warning). Never raises.
 
         A file that cannot be parsed is renamed to ``*.corrupt-<timestamp>``
-        so the next save does not destroy it, and defaults are returned.
+        so it is kept, and defaults are returned. A file that cannot be read
+        at all is left alone and saving is disabled for this session.
         """
         for path in list(self.candidate_paths) + list(self._seed_paths()):
             if not path.is_file():
                 continue
             try:
-                with path.open("r", encoding="utf-8") as handle:
-                    data = json.load(handle)
+                # utf-8-sig: accept files saved by Notepad/PowerShell with a BOM.
+                text = path.read_text(encoding="utf-8-sig")
+            except OSError as exc:
+                if path in self.candidate_paths:
+                    self._save_blocked = f"settings file {path} could not be read earlier ({exc})"
+                return UserSettings(), (
+                    f"Settings file {path} could not be read ({exc}). Using defaults; "
+                    "changes will not be saved this session."
+                )
+            try:
+                data = json.loads(text)
                 if not isinstance(data, dict):
                     raise ValueError("top level must be a JSON object")
-            except (OSError, ValueError) as exc:
-                warning = f"Settings file {path} could not be read ({exc})"
+            except ValueError as exc:
+                warning = f"Settings file {path} is not valid JSON ({exc})"
                 if path in self.candidate_paths:
                     backup = path.with_name(f"{path.name}.corrupt-{time.strftime('%Y%m%d_%H%M%S')}")
                     try:
                         path.replace(backup)
                         warning += f"; moved it to {backup.name}"
                     except OSError:
-                        pass
+                        self._save_blocked = f"could not move the unreadable {path} aside"
                 return UserSettings(), warning + ". Using defaults."
             self.loaded_from = path
             return UserSettings.from_dict(data), None
         return UserSettings(), None
 
     def save(self, settings: UserSettings) -> Optional[str]:
-        """Write settings atomically. Returns an error message or None."""
+        """Write settings atomically. Returns an error message or None.
+
+        Saves back to the file that was loaded (a seed only counts if it is
+        one of this store's own paths), so a one-off write failure cannot
+        split settings between two locations.
+        """
+        if self._save_blocked:
+            return f"Settings not saved: {self._save_blocked}"
         payload = json.dumps(settings.to_dict(), indent=2, ensure_ascii=False) + "\n"
         errors = []
-        for path in self.candidate_paths:
+        targets = [self.loaded_from] if self.loaded_from in self.candidate_paths else self.candidate_paths
+        for path in targets:
             tmp = path.with_name(path.name + ".tmp")
             try:
                 path.parent.mkdir(parents=True, exist_ok=True)
                 tmp.write_text(payload, encoding="utf-8")
                 os.replace(tmp, path)
+                self.loaded_from = path
                 return None
             except OSError as exc:
                 errors.append(f"{path}: {exc}")

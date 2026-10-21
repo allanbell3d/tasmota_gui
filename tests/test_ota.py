@@ -63,3 +63,40 @@ def test_family_and_variant():
     assert chip_family("") == FAMILY_UNKNOWN
     assert esp32_variant("ESP8266EX") is None
     assert esp32_variant("ESP32-D0WD") == ""
+
+
+@pytest.mark.parametrize("hardware", ["ESP32", "ESP32 v1.0", "ESP8686 v0.4", "ESP32-X9ZZ v1.0"])
+def test_refuses_ambiguous_esp32(hardware):
+    assert resolve_ota_url(hardware, OTA_URLS)[0] is None
+
+
+@pytest.mark.parametrize(
+    "version, ok",
+    [
+        ("15.0.1(release-tasmota)", True),
+        ("15.0.1(release-tasmota32)", True),
+        ("14.3.0(85cff52-tasmota)", True),
+        ("15.0.1(release-minimal)", True),
+        ("15.0.1(release-sensors)", False),
+        ("15.0.1(release-tasmota-4M)", False),
+        ("15.0.1(release-bluetooth)", False),
+        ("15.0.1(release-lvgl-haspmota)", False),
+        ("15.0.1", True),
+    ],
+)
+def test_specialty_images_are_refused(version, ok):
+    hardware = "ESP8266EX" if "tasmota)" in version or "4M" in version or "minimal" in version else "ESP32-D0WD-V3"
+    url, problem = resolve_ota_url(hardware, OTA_URLS, version)
+    assert (url is not None) == ok, problem
+
+
+def test_single_core_build_must_map_to_solo1():
+    assert resolve_ota_url("ESP32-S0WD v1.0", OTA_URLS, "15.0.1(release-solo1)single-core")[0].endswith("solo1.bin")
+    url, problem = resolve_ota_url("ESP32-D0WD-V3", OTA_URLS, "15.0.1(release-solo1)single-core")
+    assert url is None and "single-core" in problem
+
+
+def test_cross_family_urls_are_refused():
+    swapped = {"ESP8266": OTA_URLS["ESP32"], "ESP32": OTA_URLS["ESP8266"]}
+    assert resolve_ota_url("ESP8266EX", swapped)[0] is None
+    assert resolve_ota_url("ESP32-D0WD-V3", swapped)[0] is None

@@ -241,8 +241,12 @@ DEFAULT_BACKLOG_COMMANDS: list = []
 #   {"WARNING":"Enter command cmnd="}. We stay well below that.
 #
 # BACKLOG_MAX_COMMANDS: Older firmware queued at most 30 Backlog entries (the
-#   documented limit). Current firmware appends to an unbounded queue, so
-#   sending several Backlog chunks keeps the original order on both.
+#   documented limit) and silently dropped the rest while the queue was full.
+#   Current firmware appends to an unbounded queue. Longer command lists are
+#   split into chunks, and the executor waits for each chunk to drain
+#   (~200 ms per command, SetOption34 default) before sending the next, so
+#   both keep every command in order. Commands containing ";" or starting
+#   with "Reset" (dropped inside Backlog) are always sent one by one.
 # =============================================================================
 WEB_USERNAME = "admin"
 MAX_COMMAND_LENGTH = 1000

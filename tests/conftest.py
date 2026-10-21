@@ -38,7 +38,8 @@ class FakeNetwork:
         def default(cmd: str, request: httpx.Request) -> httpx.Response:
             if cmd.lower() == "status 0":
                 return httpx.Response(200, json=status0(ip=ip, **status_kwargs))
-            return httpx.Response(200, json={cmd.split(" ")[0]: "Done"})
+            word, _, value = cmd.partition(" ")
+            return httpx.Response(200, json={word: value or "Done"})
 
         self.devices[ip] = handler or default
 
@@ -57,6 +58,12 @@ class FakeNetwork:
     @property
     def transport(self) -> httpx.MockTransport:
         return httpx.MockTransport(self)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_settings_env(monkeypatch):
+    """Never let a real TASMOTA_GUI_SETTINGS_DIR redirect test writes."""
+    monkeypatch.delenv("TASMOTA_GUI_SETTINGS_DIR", raising=False)
 
 
 @pytest.fixture

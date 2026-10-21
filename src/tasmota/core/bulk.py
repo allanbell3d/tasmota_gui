@@ -70,7 +70,7 @@ from tasmota.constants import (
     OTA_VERIFICATION_RETRIES,
     WEB_USERNAME,
 )
-from .ota import resolve_ota_url
+from .ota import INTERMEDIATE_IMAGES, firmware_image, resolve_ota_url
 from .utils import safe_extract_json
 
 LogCallback = Callable[[str, str], None]
@@ -82,7 +82,12 @@ class _CancelledError(RuntimeError):
 
 
 class _AuthError(RuntimeError):
-    """Raised when a device rejects the web password (HTTP 401)."""
+    """Raised on HTTP 401. ``tasmota`` is True if the body is Tasmota's own
+    {"WARNING":"Need user=...&password=..."} reply."""
+
+    def __init__(self, message: str, tasmota: bool) -> None:
+        super().__init__(message)
+        self.tasmota = tasmota
 
 
 @dataclass
@@ -126,21 +131,28 @@ def split_backlog(
     Each chunk holds at most ``max_commands`` commands and is at most
     ``max_length`` characters long including the ``Backlog `` prefix.
 
+    Lengths are UTF-8 bytes, which is what Tasmota measures.
+
     Returns None when the commands cannot be sent as Backlog without changing
     their meaning or order: a command contains ";" (Backlog would split it),
-    or a single command is too long to share a Backlog. The caller then sends
+    a command starts with "Reset" (Tasmota drops Reset inside Backlog), or a
+    single command is too long to share a Backlog. The caller then sends
     every command on its own, in order.
     """
-    if any(";" in cmd for cmd in commands):
+    if any(";" in cmd or cmd.strip().lower().startswith("reset") for cmd in commands):
         return None
+
+    def size(text: str) -> int:
+        return len(text.encode("utf-8"))
+
     prefix = "Backlog "
     chunks: List[str] = []
     current: List[str] = []
     for cmd in commands:
-        if len(prefix) + len(cmd) > max_length:
+        if size(prefix + cmd) > max_length:
             return None
         candidate = current + [cmd]
-        if len(candidate) > max_commands or len(prefix + "; ".join(candidate)) > max_length:
+        if len(candidate) > max_commands or size(prefix + "; ".join(candidate)) > max_length:
             chunks.append(prefix + "; ".join(current))
             current = [cmd]
         else:
@@ -182,6 +194,9 @@ class DeviceResult:
         OtaUrl: Currently configured OTA update URL.
         Ok: True if the device responded successfully.
         Error: Error message if the device failed to respond.
+        Action: Outcome of the commands / OTA update sent in this run, e.g.
+            "OTA 14.0.0 -> 15.0.1; commands accepted" or "OTA failed: ...".
+            Empty for a plain scan.
     """
 
     IP: str
@@ -208,6 +223,7 @@ class DeviceResult:
     OtaUrl: str = ""
     Ok: bool = False
     Error: str = ""
+    Action: str = ""
 
 
 @dataclass
@@ -353,6 +369,15 @@ class TasmotaBulkExecutor:
         self.fw_ips: Set[str] = set(self.selected_ips if fw_ips is None else fw_ips)
         self.web_password = str(web_password or "")
         self._transport = transport
+        # IPs that answered 401 with Tasmota's own "Need user=..." reply. Only
+        # these receive the web password, never every host in the range.
+        self._auth_ips: Set[str] = set()
+        self._auth_lock = threading.Lock()
+        # Pause per queued command before sending the next Backlog chunk.
+        # Tasmota runs Backlog entries 200 ms apart (SetOption34 default);
+        # old firmware drops entries beyond 30 while the queue is full.
+        self.backlog_seconds_per_command = 0.25
+        self.backlog_chunk_margin = 1.0
         # OTA timing, kept on the instance so tests can shorten it.
         self.ota_restart_wait = OTA_RESTART_WAIT_SECONDS
         self.ota_verification_retries = OTA_VERIFICATION_RETRIES
@@ -436,7 +461,7 @@ class TasmotaBulkExecutor:
         self._cancel_event.set()
 
     def _redact(self, text: str) -> str:
-        """Remove the web password from text that may end up in logs."""
+        """Remove the web password from exception text that may reach logs."""
         if not self.web_password or not text:
             return text
         for secret in {self.web_password, str(httpx.QueryParams({"p": self.web_password}))[2:]}:
@@ -444,41 +469,77 @@ class TasmotaBulkExecutor:
                 text = text.replace(secret, "***")
         return text
 
-    def _get(self, client: httpx.Client, url: str, params: dict) -> httpx.Response:
+    def _get(self, client: httpx.Client, url: str, params: dict, *, idempotent: bool) -> httpx.Response:
+        """GET with retries.
+
+        Connection failures are always retried (the request never reached the
+        device). Other failures (read timeout, broken reply) are retried only
+        for read-only queries: a command might already have run.
+        """
         last_error = ""
         for attempt in range(1, self.retries + 1):
             if self._cancel_event.is_set():
                 raise _CancelledError("Cancelled")
             try:
                 response = client.get(url, params=params, timeout=self.timeout)
+            except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
+                last_error = self._redact(str(exc)) or type(exc).__name__
+            except Exception as exc:  # pragma: no cover - network errors vary
+                last_error = self._redact(str(exc)) or type(exc).__name__
+                if not idempotent:
+                    raise RuntimeError(f"{last_error} (not retried, the device may have run it)") from None
+            else:
                 if response.status_code == 200:
                     return response
                 if response.status_code == 401:
                     # Retrying will not fix a wrong or missing password.
-                    hint = "wrong web password" if self.web_password else "device needs a web password"
-                    raise _AuthError(f"HTTP 401 ({hint})")
+                    reply = safe_extract_json(response.text)
+                    warning = reply.get("WARNING", "") if isinstance(reply, dict) else ""
+                    raise _AuthError("HTTP 401", tasmota=str(warning).startswith("Need user"))
                 last_error = f"HTTP {response.status_code}"
-            except (_AuthError, _CancelledError):
-                raise
-            except Exception as exc:  # pragma: no cover - network errors vary
-                last_error = str(exc) or type(exc).__name__
             if attempt < self.retries:
                 if self._interruptible_sleep((2 ** (attempt - 1)) * self.backoff):
                     raise _CancelledError("Cancelled")
         raise RuntimeError(last_error)
 
+    @staticmethod
+    def _is_read_only(command: str) -> bool:
+        return command.strip().lower() in ("status 0", "status 5", "template")
+
     def _send_cmd(self, client: httpx.Client, ip: str, command: str) -> CommandResult:
-        """Send one command via Tasmota's ``/cm`` endpoint. Never raises."""
-        params = {"cmnd": command}
-        if self.web_password:
-            params = {"user": WEB_USERNAME, "password": self.web_password, "cmnd": command}
-        try:
-            response = self._get(client, f"http://{ip}/cm", params)
-        except Exception as exc:
-            return CommandResult(ok=False, error=self._redact(str(exc)))
-        data = safe_extract_json(response.text)
-        error = _reply_error(data)
-        return CommandResult(ok=not error, data=data, text=response.text, error=error)
+        """Send one command via Tasmota's ``/cm`` endpoint. Never raises.
+
+        The web password is only sent after the device itself asked for it
+        with a Tasmota 401 reply, so other hosts in a scanned range never
+        see it.
+        """
+        url = f"http://{ip}/cm"
+        idempotent = self._is_read_only(command)
+        with self._auth_lock:
+            use_auth = ip in self._auth_ips
+        for _ in range(2):
+            params = {"cmnd": command}
+            if use_auth:
+                params = {"user": WEB_USERNAME, "password": self.web_password, "cmnd": command}
+            try:
+                response = self._get(client, url, params, idempotent=idempotent)
+            except _AuthError as exc:
+                if not exc.tasmota:
+                    return CommandResult(ok=False, error="HTTP 401 (not a Tasmota device?)")
+                if use_auth:
+                    return CommandResult(ok=False, error="HTTP 401 (wrong web password)")
+                if not self.web_password:
+                    return CommandResult(ok=False, error="HTTP 401 (device needs a web password)")
+                with self._auth_lock:
+                    self._auth_ips.add(ip)
+                use_auth = True
+                continue
+            except Exception as exc:
+                return CommandResult(ok=False, error=self._redact(str(exc)))
+            data = safe_extract_json(response.text)
+            error = _reply_error(data)
+            return CommandResult(ok=not error, data=data, text=response.text, error=error)
+        return CommandResult(ok=False, error="HTTP 401")  # pragma: no cover - loop always returns
 
     def _send_backlog_or_commands(
         self,
@@ -500,7 +561,7 @@ class TasmotaBulkExecutor:
             self._log(
                 ip,
                 name,
-                f"Sending {len(self.commands)} commands individually{context} (contains ';' or a long command)",
+                f"Sending {len(self.commands)} commands individually{context} (contains ';', Reset or a long command)",
                 tag="CMD",
             )
             requests = list(self.commands)
@@ -512,12 +573,19 @@ class TasmotaBulkExecutor:
             requests = chunks
 
         all_ok = True
-        for request in requests:
+        for index, request in enumerate(requests):
             if self._cancel_event.is_set():
                 self._log(ip, name, "Command sending cancelled", tag="WARN")
                 return False
             if chunks is None:
                 self._log(ip, name, f"Command: {request}", tag="CMD")
+            elif index > 0:
+                # Let the previous chunk drain before queueing the next one.
+                queued = requests[index - 1].count("; ") + 1
+                pause = queued * self.backlog_seconds_per_command + self.backlog_chunk_margin
+                if self._interruptible_sleep(pause):
+                    self._log(ip, name, "Command sending cancelled", tag="WARN")
+                    return False
             result = self._send_cmd(client, ip, request)
             if not result.ok:
                 all_ok = False
@@ -537,7 +605,13 @@ class TasmotaBulkExecutor:
         if not isinstance(status0, dict):
             result.Error = "Reply is not JSON (not a Tasmota device?)"
             return result
+        try:
+            return self._parse_status(client, ip, status0, result)
+        except (AttributeError, TypeError, ValueError) as exc:
+            # Malformed reply (e.g. while a device is rebooting) - not fatal.
+            return DeviceResult(IP=ip, Error=f"Unexpected Status 0 reply ({type(exc).__name__})")
 
+    def _parse_status(self, client: httpx.Client, ip: str, status0: dict, result: DeviceResult) -> DeviceResult:
         statusfwr = status0.get("StatusFWR", {}) or {}
         status = status0.get("Status", {}) or {}
         statusnet = status0.get("StatusNET", {}) or {}
@@ -557,7 +631,7 @@ class TasmotaBulkExecutor:
         result.Version = version
         result.Core = statusfwr.get("Core", "")
         result.SDK = statusfwr.get("SDK", "")
-        result.Hardware = statusfwr.get("Hardware", "")
+        result.Hardware = str(statusfwr.get("Hardware", "") or "")
         result.Hostname = statusnet.get("Hostname", "")
         result.Mac = statusnet.get("Mac", "")
         result.Name = status.get("DeviceName") or result.Hostname or "(unknown)"
@@ -607,45 +681,80 @@ class TasmotaBulkExecutor:
         result.Ok = True
         return result
 
-    def _upgrade_device(self, client: httpx.Client, ip: str, info: DeviceResult) -> bool:
-        """Run one OTA update. Returns True if the device came back online."""
+    def _set_ota_url(self, client: httpx.Client, ip: str, url: str) -> str:
+        """Set OtaUrl and confirm the device stored it. Returns an error or ""."""
+        reply = self._send_cmd(client, ip, f"OtaUrl {url}")
+        if not reply.ok:
+            return reply.error
+        stored = reply.data.get("OtaUrl") if isinstance(reply.data, dict) else None
+        if stored != url:
+            # Tasmota keeps the old value when the text does not fit.
+            return f"device kept OtaUrl {stored!r}"
+        return ""
+
+    def _restore_default_ota_url(self, client: httpx.Client, ip: str, name: str, hardware: str) -> None:
+        # Point the device back at the official release so later updates
+        # are not pinned to a one-off URL used for this run.
+        default_url, _ = resolve_ota_url(hardware, OTA_URLS)
+        if not default_url:
+            return
+        error = self._set_ota_url(client, ip, default_url)
+        if error:
+            self._log(ip, name, f"Could not re-apply official OTA URL: {error}", tag="WARN")
+        else:
+            self._log(ip, name, f"Re-applied official OTA URL: {default_url}", tag="OTA")
+
+    def _upgrade_device(self, client: httpx.Client, ip: str, info: DeviceResult):
+        """Run one OTA update.
+
+        Returns (online, action, new_info): ``online`` is True if the device
+        came back on a final (not minimal/safeboot) image, ``action`` is a
+        short outcome for DeviceResult.Action, ``new_info`` is the device
+        info read after the update (or None).
+        """
         name = info.Name
         hardware = info.Hardware
-        ota_url, problem = resolve_ota_url(hardware, self.ota_urls)
+        ota_url, problem = resolve_ota_url(hardware, self.ota_urls, info.Version)
         if ota_url is None:
             self._log(ip, name, f"OTA skipped: {problem}", tag="ERROR")
-            return False
+            return False, f"OTA skipped: {problem}", None
 
         self._log(ip, name, f"Sending OTA upgrade ({hardware}): {ota_url}", tag="OTA")
-        reply = self._send_cmd(client, ip, f"OtaUrl {ota_url}")
-        if not reply.ok:
-            self._log(ip, name, f"OTA aborted, OtaUrl not accepted: {reply.error}", tag="ERROR")
-            return False
+        error = self._set_ota_url(client, ip, ota_url)
+        if error:
+            self._log(ip, name, f"OTA aborted, OtaUrl not accepted: {error}", tag="ERROR")
+            return False, f"OTA aborted: OtaUrl not accepted ({error})", None
         reply = self._send_cmd(client, ip, "Upgrade 1")
         if not reply.ok:
             self._log(ip, name, f"OTA aborted, Upgrade 1 not accepted: {reply.error}", tag="ERROR")
-            return False
+            self._restore_default_ota_url(client, ip, name, hardware)
+            return False, f"OTA aborted: Upgrade 1 not accepted ({reply.error})", None
         upgrade_reply = reply.data.get("Upgrade") if isinstance(reply.data, dict) else None
         if upgrade_reply:
             self._log(ip, name, f"Device replied: {upgrade_reply}", tag="OTA")
 
+        pinned_note = f"OtaUrl left at {ota_url} because the device may still be updating"
         self._log(ip, name, f"Waiting {self.ota_restart_wait}s for OTA process (cancellable)...", tag="OTA")
         if self._interruptible_sleep(self.ota_restart_wait):
-            self._log(ip, name, "OTA wait cancelled by user", tag="OTA")
-            return False
+            self._log(ip, name, f"OTA wait cancelled by user; {pinned_note}", tag="WARN")
+            return False, "OTA cancelled while the device was updating", None
         self._log(ip, name, "Sending Restart 1", tag="OTA")
         self._send_cmd(client, ip, "Restart 1")
-        if self._interruptible_sleep(1):
-            return False
 
         for _ in range(self.ota_verification_retries):
-            if self._interruptible_sleep(self.ota_verification_interval):
-                self._log(ip, name, "OTA verification cancelled by user", tag="OTA")
-                return False
+            if self._interruptible_sleep(max(1, self.ota_verification_interval)):
+                self._log(ip, name, f"OTA verification cancelled by user; {pinned_note}", tag="WARN")
+                return False, "OTA cancelled during verification", None
             result = self._collect_info_for_ip(client, ip)
             if not result.Ok:
                 continue  # Device not yet online after OTA - retry
+            image = firmware_image(result.Version)
+            if image in INTERMEDIATE_IMAGES:
+                # ESP8266 two-step update: minimal fetches the final image next.
+                self._log(ip, name, f"Device is on the {image} image, waiting for the final firmware", tag="OTA")
+                continue
             if result.Version == info.Version:
+                action = f"OTA: firmware unchanged ({result.Version})"
                 self._log(
                     ip,
                     name,
@@ -653,41 +762,41 @@ class TasmotaBulkExecutor:
                     tag="WARN",
                 )
             else:
+                action = f"OTA {info.Version} -> {result.Version}"
                 self._log(ip, name, f"Firmware updated: {info.Version} -> {result.Version}", tag="OTA")
-            # Point the device back at the official release so later updates
-            # are not pinned to a one-off URL used for this run.
-            default_url, _ = resolve_ota_url(hardware, OTA_URLS)
-            if default_url:
-                restore = self._send_cmd(client, ip, f"OtaUrl {default_url}")
-                if restore.ok:
-                    self._log(ip, name, f"Re-applied official OTA URL: {default_url}", tag="OTA")
-                else:
-                    self._log(ip, name, f"Could not re-apply official OTA URL: {restore.error}", tag="WARN")
-            return True
-        self._log(ip, name, "Device did not come back online after OTA", tag="ERROR")
-        return False
+            self._restore_default_ota_url(client, ip, name, hardware)
+            return True, action, result
+        self._log(ip, name, f"Device did not come back online after OTA; {pinned_note}", tag="ERROR")
+        return False, "OTA failed: device did not come back online", None
 
     def _handle_ip(self, client: httpx.Client, ip: str) -> DeviceResult:
         if self._cancel_event.is_set():
             return DeviceResult(IP=ip, Ok=False, Error="Cancelled")
         try:
             info = self._collect_info_for_ip(client, ip)
-            if info.Ok:
-                self._log(ip, info.Name, "Info OK", tag="INFO")
-                if ip in self.selected_ips:
-                    if self.do_upgrade and ip in self.fw_ips:
-                        upgraded = self._upgrade_device(client, ip, info)
-                        if upgraded and self.send_backlog and ip in self.cmd_ips and self.commands:
-                            self._send_backlog_or_commands(
-                                client,
-                                ip,
-                                info.Name,
-                                after_upgrade=True,
-                            )
-                    elif self.send_backlog and ip in self.cmd_ips and self.commands:
-                        self._send_backlog_or_commands(client, ip, info.Name)
-            else:
+            if not info.Ok:
                 self._log(ip, info.Name, f"No response ({info.Error})", tag="ERROR")
+                return info
+            self._log(ip, info.Name, "Info OK", tag="INFO")
+            if ip not in self.selected_ips:
+                return info
+
+            actions: List[str] = []
+            wants_commands = self.send_backlog and ip in self.cmd_ips and bool(self.commands)
+            online = True
+            if self.do_upgrade and ip in self.fw_ips:
+                online, action, new_info = self._upgrade_device(client, ip, info)
+                actions.append(action)
+                if new_info is not None:
+                    new_info.Name = new_info.Name or info.Name
+                    info = new_info
+            if wants_commands:
+                if online:
+                    ok = self._send_backlog_or_commands(client, ip, info.Name, after_upgrade=self.do_upgrade and ip in self.fw_ips)
+                    actions.append("commands accepted" if ok else "commands failed (see log)")
+                else:
+                    actions.append("commands not sent")
+            info.Action = "; ".join(actions)
             return info
         except Exception as exc:
             message = self._redact(str(exc))
@@ -735,7 +844,9 @@ class TasmotaBulkExecutor:
 
             # The 'with' blocks ensure proper cleanup: sockets are closed
             # and threads are terminated even if an error occurs.
-            with httpx.Client(limits=limits, timeout=timeout, transport=self._transport) as client:
+            # trust_env=False: never route LAN device traffic (and the web
+            # password) through proxies configured in the environment.
+            with httpx.Client(limits=limits, timeout=timeout, transport=self._transport, trust_env=False) as client:
                 with ThreadPoolExecutor(max_workers=self.threads) as executor:
                     # Submit all IPs for parallel processing.
                     # future_map lets us look up which IP each future belongs to.
@@ -758,8 +869,9 @@ class TasmotaBulkExecutor:
                             device_result = future.result()
                         except Exception as exc:  # pragma: no cover - safety net
                             # Catch any unexpected errors that escaped _handle_ip
-                            self._log(ip, "", f"FAIL {exc}", tag="ERROR")
-                            device_result = DeviceResult(IP=ip, Ok=False, Error=str(exc))
+                            message = self._redact(str(exc))
+                            self._log(ip, "", f"FAIL {message}", tag="ERROR")
+                            device_result = DeviceResult(IP=ip, Ok=False, Error=message)
 
                         results.append(device_result)
                         completed += 1
@@ -812,6 +924,8 @@ class TasmotaBulkExecutor:
                         "OtaUrl": device.OtaUrl,
                     }
                 )
+            if any(d.Action for d in results):
+                base["Action"] = device.Action
             rows.append(base)
 
         # ----------------------------------------------------------------
