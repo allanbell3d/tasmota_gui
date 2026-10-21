@@ -74,7 +74,7 @@ This project follows **semantic versioning**:
   file that can't be read is never overwritten.
 - `tools/migrate_settings_from_git.py` copies the values that used to be
   hard-coded in `constants.py` into the settings file.
-- **Tests** (`tests/`, 95 tests with a fake Tasmota network), **CI** (GitHub
+- **Tests** (`tests/`, 97 tests with a fake Tasmota network), **CI** (GitHub
   Actions: ruff + pytest on Python 3.10/3.12) and **`pyproject.toml`**
   (extras `desktop`, `mobile`, `export`, `dev`; use an editable install so
   `assets/` is found).
