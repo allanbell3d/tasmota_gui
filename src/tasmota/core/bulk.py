@@ -493,11 +493,17 @@ class TasmotaBulkExecutor:
         self._cancel_event.set()
 
     def _redact(self, text: str) -> str:
-        """Remove the web password from exception text that may reach logs."""
+        """Remove the web password from exception text that may reach logs.
+
+        ``password=<value>`` (as in a request URL) is always masked. Bare
+        occurrences are masked only for passwords of 4+ characters, so a
+        password such as "1" does not mangle "HTTP 401".
+        """
         if not self.web_password or not text:
             return text
-        for secret in {self.web_password, str(httpx.QueryParams({"p": self.web_password}))[2:]}:
-            if secret:
+        text = re.sub(r"(password=)[^&\s'\"]*", r"\1***", text)
+        if len(self.web_password) >= 4:
+            for secret in {self.web_password, str(httpx.QueryParams({"p": self.web_password}))[2:]}:
                 text = text.replace(secret, "***")
         return text
 

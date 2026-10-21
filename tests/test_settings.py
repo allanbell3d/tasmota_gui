@@ -30,6 +30,8 @@ def test_bad_types_fall_back_to_defaults(tmp_path):
         defaults.info_mode,
     )
     assert loaded.commands == ["Power on"]
+    # Unusable values are kept so a hand edit is not lost on the next save.
+    assert loaded.extra["_invalid_threads"] == "abc" and loaded.extra["_invalid_info_mode"] == "huge"
 
 
 def test_corrupt_file_is_preserved_not_overwritten(tmp_path):
@@ -180,3 +182,13 @@ def test_values_are_clamped_and_finite(tmp_path):
     assert loaded.timeout == UserSettings().timeout and loaded.timeout <= MAX_TIMEOUT
     assert loaded.retries == 1
     assert loaded.info_mode == "full"
+
+
+def test_hand_edited_shapes_are_accepted(tmp_path):
+    (tmp_path / SETTINGS_FILENAME).write_text(
+        json.dumps({"ip_ranges": ["10.0.0.1-5", "10.0.1.1"], "commands": "Power on\nTelePeriod 30\n"})
+    )
+    loaded, _ = SettingsStore(tmp_path).load()
+    assert loaded.ip_ranges == "10.0.0.1-5\n10.0.1.1"
+    assert loaded.commands == ["Power on", "TelePeriod 30"]
+    assert not any(key.startswith("_invalid_") for key in loaded.extra)

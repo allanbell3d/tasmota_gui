@@ -106,24 +106,60 @@ class UserSettings:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "UserSettings":
-        """Build settings from parsed JSON, ignoring values of the wrong type."""
+        """Build settings from parsed JSON.
+
+        Hand-edited files get some slack: ``ip_ranges`` may be a list of
+        lines, ``commands`` a single multi-line string. A value that still
+        cannot be used is kept under ``_invalid_<key>`` (and saved back), so
+        an edit is never silently thrown away.
+        """
         settings = cls()
-        if isinstance(data.get("ip_ranges"), str):
-            settings.ip_ranges = data["ip_ranges"]
+        invalid: Dict[str, Any] = {}
+
+        ip_ranges = data.get("ip_ranges")
+        if isinstance(ip_ranges, list) and all(isinstance(line, str) for line in ip_ranges):
+            ip_ranges = "\n".join(ip_ranges)
+        if isinstance(ip_ranges, str):
+            settings.ip_ranges = ip_ranges
+        elif "ip_ranges" in data:
+            invalid["ip_ranges"] = ip_ranges
+
         commands = data.get("commands")
+        if isinstance(commands, str):
+            commands = commands.splitlines()
         if isinstance(commands, list):
-            settings.commands = [str(cmd) for cmd in commands if isinstance(cmd, str) and cmd.strip()]
-        settings.threads = _coerce(data.get("threads"), int, settings.threads, MIN_THREADS, MAX_THREADS)
-        settings.timeout = _coerce(data.get("timeout"), float, settings.timeout, MIN_TIMEOUT, MAX_TIMEOUT)
-        settings.retries = _coerce(data.get("retries"), int, settings.retries, MIN_RETRIES, MAX_RETRIES)
+            settings.commands = [cmd.strip() for cmd in commands if isinstance(cmd, str) and cmd.strip()]
+            if any(not isinstance(cmd, str) for cmd in commands):
+                invalid["commands"] = [cmd for cmd in commands if not isinstance(cmd, str)]
+        elif "commands" in data:
+            invalid["commands"] = commands
+
+        for key, kind, low, high in (
+            ("threads", int, MIN_THREADS, MAX_THREADS),
+            ("timeout", float, MIN_TIMEOUT, MAX_TIMEOUT),
+            ("retries", int, MIN_RETRIES, MAX_RETRIES),
+        ):
+            default = getattr(settings, key)
+            value = _coerce(data.get(key), kind, None, low, high)
+            setattr(settings, key, default if value is None else value)
+            if value is None and key in data:
+                invalid[key] = data[key]
+
         info_mode = str(data.get("info_mode", "")).strip().lower()
         if info_mode in ("lite", "full"):
             settings.info_mode = info_mode
-        if isinstance(data.get("output_dir"), str):
-            settings.output_dir = data["output_dir"]
-        if isinstance(data.get("web_password"), str):
-            settings.web_password = data["web_password"]
+        elif "info_mode" in data:
+            invalid["info_mode"] = data["info_mode"]
+
+        for key in ("output_dir", "web_password"):
+            if isinstance(data.get(key), str):
+                setattr(settings, key, data[key])
+            elif key in data:
+                invalid[key] = data[key]
+
         settings.extra = {k: v for k, v in data.items() if k not in cls._KNOWN_KEYS}
+        for key, value in invalid.items():
+            settings.extra[f"_invalid_{key}"] = value
         return settings
 
 
