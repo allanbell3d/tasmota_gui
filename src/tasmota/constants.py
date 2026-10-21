@@ -17,7 +17,8 @@ Constants are organized into logical sections:
 8. OTA Timing - Firmware update wait times
 9. Input Validation - Safe parameter bounds
 10. Log Panel - Display buffer limits
-11. Command Library - Default Tasmota commands
+11. Default Backlog Commands - empty; personal commands live in settings
+12. Tasmota HTTP Command Limits - web user, command length, backlog size
 """
 
 # =============================================================================
@@ -26,7 +27,7 @@ Constants are organized into logical sections:
 # These identify the application in window titles, logs, and exports.
 # Update APP_VERSION when releasing new versions.
 # =============================================================================
-APP_VERSION = "v0.2.2"
+APP_VERSION = "v0.3.0"
 APP_TITLE_SUFFIX = "AllanBell3D Tasmota Bulk Tool (Cross-Platform GUI)"
 
 # =============================================================================
@@ -48,7 +49,7 @@ APP_TITLE_SUFFIX = "AllanBell3D Tasmota Bulk Tool (Cross-Platform GUI)"
 #
 # BACKOFF: Multiplier for exponential delay between retries
 #   - Prevents overwhelming struggling devices
-#   - Delay = (2^attempt) * BACKOFF seconds
+#   - Delay before retry n (n = 1, 2, ...) = 2^(n-1) * BACKOFF seconds
 # =============================================================================
 DEFAULT_THREADS = 100
 DEFAULT_TIMEOUT = 1
@@ -63,7 +64,8 @@ DEFAULT_BACKOFF = 1.0
 #
 # ANDROID_THREAD_DEFAULT: Starting value for Android (conservative)
 # ANDROID_THREAD_MAX: Hard cap for Android to prevent crashes
-# DESKTOP_THREAD_MAX: Desktop can handle more concurrent connections
+# DESKTOP_THREAD_MAX: Cap for the Kivy UI when previewed on a desktop
+#   (the PySide6 desktop app uses MAX_THREADS below)
 # =============================================================================
 ANDROID_THREAD_DEFAULT = 20
 ANDROID_THREAD_MAX = 32
@@ -84,19 +86,14 @@ DEFAULT_CSV = "tasmota_hardware_summary.csv"
 # =============================================================================
 # Default IP Ranges
 # =============================================================================
-# Pre-populated IP ranges shown in the UI when the app starts.
-# Users can edit these to match their network configuration.
+# Neutral example shown on first start. Your own ranges are stored in the
+# private settings file (see tasmota/core/settings.py) once you edit them.
 #
 # Format: Each line is either:
 #   - Single IP: 192.168.1.100
 #   - Range: 192.168.1.10-254 (scans .10 through .254)
-#
-# The ranges below are examples - users should customize for their network.
 # =============================================================================
-DEFAULT_IP_RANGES = """192.168.60.10-254
-192.168.62.10-254
-192.168.64.10-254
-192.168.66.10-254"""
+DEFAULT_IP_RANGES = "192.168.1.10-254"
 
 # =============================================================================
 # OTA (Over-The-Air) Firmware URLs
@@ -109,8 +106,13 @@ DEFAULT_IP_RANGES = """192.168.60.10-254
 #
 # ESP32: Newer, more powerful chips
 #   - Uses uncompressed .bin (ESP32 has more flash space)
+#   - This is the classic ESP32 image. Variant chips (C3, S3, single-core...)
+#     automatically get tasmota32<variant>.bin from the same folder; see
+#     tasmota/core/ota.py.
 #
-# Users can override these in the OTA panel if using custom firmware.
+# Users can override these per session (e.g. to pin a release folder such as
+# .../tasmota32/release-15.0.0/tasmota32.bin). After a successful update the
+# device's OtaUrl is reset to these official release defaults.
 # =============================================================================
 OTA_URLS = {
     "ESP32": "http://ota.tasmota.com/tasmota32/release/tasmota32.bin",
@@ -219,93 +221,29 @@ MAX_THREADS = 1000      # Reasonable upper limit for concurrent connections
 LOG_PANEL_MAX_LINES = 100   # Maximum log lines to keep in memory/display
 
 # =============================================================================
-# Default Command Library
+# Default Backlog Commands
 # =============================================================================
-# Pre-configured Tasmota commands that appear in the backlog editor.
-# Each entry is a tuple: (command_string, description)
-#
-# These are the author's personal defaults for their smart home setup.
-# Users can modify these or use the JSON command library feature for
-# more extensive command sets.
-#
-# Command categories:
-#   - MQTT: Broker connection and topic configuration
-#   - Location: GPS coordinates and timezone
-#   - State: Power retention and reporting precision
-#   - Options: SetOption flags for various behaviors
-#   - Wi-Fi: Connectivity and stability settings
-#   - Logging: Debug output configuration
-#   - Rules: Watchdog automation rules
-#
-# NOTE: The MQTT credentials below are examples - users must change these!
+# Commands pre-filled in the backlog editor on first start. Intentionally
+# empty: personal commands (MQTT credentials, location, rules) belong in the
+# private settings file, not in source code. Each entry is one Tasmota command
+# string, e.g. "TelePeriod 30".
 # =============================================================================
-COMMAND_LIBRARY = [
-    # --- MQTT broker configuration ---
-    ("mqtthost 192.168.64.5", "Set the MQTT broker host."),
-    ("mqttuser villa", "Set the MQTT username."),
-    ("mqttpassword villa", "Set the MQTT password."),
-    ("FullTopic %prefix%/%topic%/", "Configure the MQTT topic."),
-    ("TelePeriod 20", "Publish telemetry every 20 seconds."),
+DEFAULT_BACKLOG_COMMANDS: list = []
 
-    # --- Device location ---
-    ("latitude 25.163853", "Set device latitude."),
-    ("longitude 55.219098", "Set device longitude."),
-    ("timezone +4", "Set timezone offset."),
-
-    # --- State retention & reporting precision ---
-    ("powerretain on", "Enable the MQTT retain flag for POWER status messages."),
-    ("wattres 2", "Set watt resolution to 2 decimals."),
-    ("EnergyRes 2", "Set energy resolution to 2 decimals."),
-    ("AmpRes 2", "Set ampere resolution to 2 decimals."),
-    ("switchretain off", "Disable switch retain."),
-    ("buttonretain off", "Disable button retain."),
-    ("poweronstate 3", "Restore last power state after reboot."),
-
-    # --- Operational options ---
-    ("SetOption56 1", "Scan for the strongest visible Wi-Fi network at restart."),
-    ("SetOption57 1", "Re-scan Wi-Fi every 44 minutes to switch to a stronger AP."),
-    ("SetOption59 1", "Publish tele/%topic%/STATE alongside stat/%topic%/RESULT for power commands."),
-    ("SetOption65 1", "Disable fast power-cycle recovery detection."),
-    ("WifiConfig 5", "Wait until the configured AP is available again without rebooting."),
-
-    # --- Wi-Fi stability ---
-    ("WifiPower 17", "Set Wi-Fi transmit power to 17 dBm (default level)."),
-    ("Sleep 0", "Disable sleep mode to reduce latency and improve Wi-Fi reliability."),
-    ("MqttKeepAlive 60", "Set MQTT keepalive to 60 seconds."),
-    ("SetOption36 10", "Allow up to 10 rapid boot loops before progressive safe-mode recovery."),
-
-    # --- Logging & monitoring ---
-    ("SerialLog 0", "Disable serial logging to save resources."),
-    ("MqttLog 1", "Log only MQTT errors."),
-    ("WebLog 2", "Set web console log level to normal."),
-    ("SysLog 3", "Set system log level to debug."),
-    ("LogHost 192.168.64.55", "Send syslog messages to remote host."),
-    ("LogPort 514", "Set remote syslog UDP port."),
-
-    # --- Watchdog rules ---
-    ("rule1 \"\"", "Clear existing Rule1 definition."),
-    ("rule2 \"\"", "Clear existing Rule2 definition."),
-    ("rule3 \"\"", "Clear existing Rule3 definition."),
-    (
-        "Rule1 on Wifi#Disconnected do RuleTimer1 120 endon on Wifi#Connected do RuleTimer1 0 endon on Rules#Timer=1 do Mem1 1 endon on Rules#Timer=1 do Var1 1 endon on Time#Minute|1 do backlog status 4 endon on StatusMEM#Heap<14 do Var1 3 endon on StatusMEM#Heap<14 do Mem1 3 endon",
-        "Track Wi-Fi disconnects and low heap conditions, recording failure codes and requesting status updates.",
-    ),
-    (
-        "Rule2 on Time#Minute|10 do backlog status 5 endon on StatusNET#IPAddress==0.0.0.0 do if (var2==0) backlog var2 1; RuleTimer2 120; endif endon on StatusNET#IPAddress$!0.0.0.0 do Var2 0 endon on Rules#Timer=2 do backlog status 5 endon on StatusNET#IPAddress==0.0.0.0 do if (var2==1) backlog mem1 2; var1 2; endif endon on Var1#State>0 do RuleTimer5 2 endon on Rules#Timer=5 do restart 1 endon",
-        "Issue periodic status requests, monitor network connectivity, and trigger restarts with failure codes when IP loss persists.",
-    ),
-    
-    (
-        " Rule3 on System#Boot do RuleTimer3 1200 endon on Wifi#Connected do RuleTimer3 0 endon on Mqtt#Connected do backlog RuleTimer3 0; event wd=%mem1% endon on Rules#Timer=3 do backlog mem1 5; var1 5 endon on event#wd do Publish watchdog/alert {\"device\":\"%topic%\",\"failure\":%value%} endon on event#wd do Mem1 0 endon", 
-        "Publish watchdog alerts over MQTT, clear failure memory when connectivity is restored, and fail-safe reboot path if Wi-Fi never connects within 20 minutes after boot.",
-    ),
-
-    # (
-        # "Rule3 on System#Boot do RuleTimer3 1200 endon on Wifi#Connected do RuleTimer3 0 endon on Rules#Timer=3 do backlog mem1 5; var1 5 endon on Mqtt#Connected do event wd=%mem1% endon on event#wd do Publish watchdog/alert {\"device\":\"%topic%\",\"failure\":%value%} endon on event#wd do Mem1 0 endon",
-        # "Publish watchdog alerts over MQTT, clear failure memory when connectivity is restored, and fail-safe reboot path if Wi-Fi never connects within 20 minutes after boot.",
-    # ),
-
-    ("rule1 1", "Enable Rule1."),
-    ("rule2 1", "Enable Rule2."),
-    ("rule3 1", "Enable Rule3."),
-]
+# =============================================================================
+# Tasmota HTTP Command Limits
+# =============================================================================
+# WEB_USERNAME: Tasmota's fixed web admin user name (WEB_USERNAME in
+#   my_user_config.h). Sent with the web password when one is configured.
+#
+# MAX_COMMAND_LENGTH: Tasmota rejects /cm?cmnd= payloads of
+#   MQTT_MAX_PACKET_SIZE (1200 bytes on default builds) or more, answering
+#   {"WARNING":"Enter command cmnd="}. We stay well below that.
+#
+# BACKLOG_MAX_COMMANDS: Older firmware queued at most 30 Backlog entries (the
+#   documented limit). Current firmware appends to an unbounded queue, so
+#   sending several Backlog chunks keeps the original order on both.
+# =============================================================================
+WEB_USERNAME = "admin"
+MAX_COMMAND_LENGTH = 1000
+BACKLOG_MAX_COMMANDS = 30

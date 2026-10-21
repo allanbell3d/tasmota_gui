@@ -4,9 +4,8 @@ This module handles loading and parsing command configurations from JSON files.
 Commands are used to configure Tasmota devices in bulk - things like MQTT settings,
 timezone, power retention, and custom rules.
 
-The command library supports two formats:
-1. Simple tuple format: ("Command Value", "Description")
-2. Rich JSON format with categories, metadata, and separate command/value fields
+Each JSON entry may be a list/tuple (command, value, description, category) or
+an object with categories, metadata, and separate command/value fields.
 
 Main Components:
     CommandRecord: Data container for a single command entry
@@ -44,19 +43,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, List, Tuple
 
-from tasmota.constants import COMMAND_LIBRARY
 from tasmota.core.utils import candidate_asset_roots
 
 __all__ = [
-    "DEFAULT_COMMANDS",
     "CommandLibraryError",
     "CommandRecord",
     "extract_categories",
     "load_command_library",
 ]
-
-DEFAULT_COMMANDS = [command for command, _ in COMMAND_LIBRARY]
-
 
 def extract_categories(records: Iterable["CommandRecord"]) -> Tuple[List[str], bool]:
     """Extract sorted unique category names from command records.
