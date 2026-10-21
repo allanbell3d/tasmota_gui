@@ -1,7 +1,4 @@
-# ============================
-# AllanBell3D Tasmota Bulk Tool (Cross-Platform GUI)
-# Version v0.2.2
-# ============================
+"""Main window of the AllanBell3D Tasmota Bulk Tool desktop (PySide6) UI."""
 
 import html
 import os
@@ -9,34 +6,25 @@ import sys
 import time
 from typing import List, Optional, Tuple
 
-from PySide6.QtCore import Qt, QEvent, QObject, QThread, QTimer, Signal
+from PySide6.QtCore import Qt, QEvent, QObject, QThread
 from PySide6.QtGui import QColor, QTextCharFormat, QTextCursor, QFontMetrics
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QGroupBox, QPushButton, QTextEdit, QSpinBox, QFileDialog,
-    QProgressBar, QMessageBox, QDialog, QTableWidget,
-    QTableWidgetItem, QCheckBox, QHeaderView, QLineEdit, QSizePolicy,
-    QAbstractItemView, QStyleOptionButton, QStyle, QComboBox
+    QProgressBar, QMessageBox, QDialog, QLineEdit, QSizePolicy,
 )
 
-from tasmota.core.bulk import TasmotaBulkExecutor
-from tasmota.core.commands import (
-    DEFAULT_COMMANDS,
-    CommandLibraryError,
-    load_command_library,
-)
+from tasmota.core.commands import CommandLibraryError, load_command_library
+from tasmota.core.settings import SettingsStore, UserSettings
 from tasmota.constants import (
     APP_TITLE_SUFFIX,
     APP_VERSION,
     DEFAULT_BACKOFF,
-    DEFAULT_IP_RANGES,
     DEFAULT_OUTPUT_DIR_NAME,
-    DEFAULT_RETRIES,
-    DEFAULT_THREADS,
-    DEFAULT_TIMEOUT,
+    MAX_THREADS,
     OTA_URLS,
 )
-from tasmota.core.utils import build_ip_list, is_valid_ip, parse_ip_range, validate_ip_ranges
+from tasmota.core.utils import validate_ip_ranges
 
 # ============================
 # Defaults / constants
@@ -51,6 +39,13 @@ def _get_default_output_directory() -> str:
     default_dir = os.path.join(base_dir, DEFAULT_OUTPUT_DIR_NAME)
     os.makedirs(default_dir, exist_ok=True)
     return default_dir
+
+
+def _resolve_output_directory(saved: str) -> str:
+    """Use the remembered output folder if it still exists."""
+    if saved and os.path.isdir(saved):
+        return saved
+    return _get_default_output_directory()
 
 
 def load_command_library_safe() -> Tuple[List, Optional[str]]:
@@ -92,7 +87,12 @@ class MainWindow(QWidget):
         mode_box.setFixedHeight(self._calculate_mode_box_height(mode_box))
         v.addWidget(mode_box)
 
-        self.info_mode = "lite"
+        # Personal values (IP ranges, commands, password...) come from the
+        # private settings file, see tasmota/core/settings.py.
+        self._settings_store = SettingsStore()
+        self.settings, settings_warning = self._settings_store.load()
+
+        self.info_mode = self.settings.info_mode
         self._command_library_last_error = None  # Track last error to avoid duplicates
         self._update_mode_buttons()
         self.btn_lite.clicked.connect(lambda: self.set_info_mode("lite"))
@@ -100,15 +100,19 @@ class MainWindow(QWidget):
 
         ctl = QHBoxLayout()
         ctl.addWidget(QLabel("Threads:")); self.spin_threads = QSpinBox()
-        self.spin_threads.setRange(1,1000); self.spin_threads.setValue(DEFAULT_THREADS); ctl.addWidget(self.spin_threads)
+        self.spin_threads.setRange(1, MAX_THREADS); self.spin_threads.setValue(self.settings.threads); ctl.addWidget(self.spin_threads)
         ctl.addWidget(QLabel("Timeout (s):")); self.spin_timeout = QSpinBox()
-        self.spin_timeout.setRange(1,120); self.spin_timeout.setValue(DEFAULT_TIMEOUT); ctl.addWidget(self.spin_timeout)
+        self.spin_timeout.setRange(1,120); self.spin_timeout.setValue(max(1, round(self.settings.timeout))); ctl.addWidget(self.spin_timeout)
         ctl.addWidget(QLabel("Retries:")); self.spin_retries = QSpinBox()
-        self.spin_retries.setRange(1,10); self.spin_retries.setValue(DEFAULT_RETRIES); ctl.addWidget(self.spin_retries)
+        self.spin_retries.setRange(1,10); self.spin_retries.setValue(self.settings.retries); ctl.addWidget(self.spin_retries)
+        ctl.addWidget(QLabel("Web password:")); self.txt_password = QLineEdit(self.settings.web_password)
+        self.txt_password.setEchoMode(QLineEdit.Password)
+        self.txt_password.setPlaceholderText("only if devices use WebPassword")
+        ctl.addWidget(self.txt_password)
         v.addLayout(ctl)
 
         v.addWidget(QLabel("IP ranges:")); self.txt_ranges = QTextEdit()
-        self.txt_ranges.setPlainText(DEFAULT_IP_RANGES)
+        self.txt_ranges.setPlainText(self.settings.ip_ranges)
         self._set_text_edit_rows(self.txt_ranges, 5)
         v.addWidget(self.txt_ranges)
 
@@ -122,7 +126,7 @@ class MainWindow(QWidget):
         v.addLayout(cmd_header)
 
         self.txt_cmds = QTextEdit()
-        self.txt_cmds.setPlainText("\n".join(DEFAULT_COMMANDS))
+        self.txt_cmds.setPlainText("\n".join(self.settings.commands))
         self.txt_cmds.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         v.addWidget(self.txt_cmds, 1)
         self.txt_cmds.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -167,15 +171,60 @@ class MainWindow(QWidget):
         self.btn_log_save.clicked.connect(self.save_log)
 
         # defaults & state
-        self.output_folder = _get_default_output_directory()
+        self.output_folder = _resolve_output_directory(self.settings.output_dir)
         self.last_results = []
         self.last_cmds_selected = []
         self.last_fw_selected = []
         self.last_state = {}
-        self.ota_urls = dict(OTA_URLS)
+        self.ota_urls = dict(OTA_URLS)  # Session only, never saved
         self._scan_running = False
+        self._close_after_run = False
         self.worker = None
         self.worker_thread = None
+
+        if settings_warning:
+            self.append_log(f"[WARN] {settings_warning}", tag="WARN")
+        elif self._settings_store.loaded_from:
+            self.append_log(f"[INFO] Settings loaded from {self._settings_store.loaded_from}", tag="INFO")
+
+    # ----- Settings -----
+    def _collect_settings(self) -> UserSettings:
+        settings = self.settings
+        settings.ip_ranges = self.txt_ranges.toPlainText()
+        settings.commands = [ln.strip() for ln in self.txt_cmds.toPlainText().splitlines() if ln.strip()]
+        settings.threads = self.spin_threads.value()
+        settings.timeout = float(self.spin_timeout.value())
+        settings.retries = self.spin_retries.value()
+        settings.info_mode = self.info_mode
+        settings.output_dir = self.output_folder
+        settings.web_password = self.txt_password.text()
+        return settings
+
+    def _save_settings(self) -> None:
+        error = self._settings_store.save(self._collect_settings())
+        if error:
+            self.append_log(f"[WARN] {error}", tag="WARN")
+
+    def closeEvent(self, event) -> None:
+        if self._scan_running:
+            answer = QMessageBox.question(
+                self,
+                "Run in progress",
+                "A run is still in progress. Cancel it and close when it has stopped?\n\n"
+                "Devices already flashing firmware will finish on their own.",
+            )
+            if answer != QMessageBox.Yes:
+                event.ignore()
+                return
+            self._close_after_run = True
+            if self.worker is not None:
+                self.worker.executor.cancel()
+            self.append_log("[INFO] Closing after the current run stops...", tag="INFO")
+            event.ignore()  # Closed from _on_worker_finished once the thread is done
+            return
+        self._save_settings()
+        self._wait_for_worker_thread()
+        super().closeEvent(event)
 
     # ----- Info mode -----
     def set_info_mode(self, mode: str) -> None:
@@ -261,7 +310,7 @@ class MainWindow(QWidget):
         path = os.path.join(self.output_folder, f"tasmota_log_{ts_suffix}.txt")
         try:
             with open(path, "w", encoding="utf-8") as f:
-                for line, tag in self.all_logs:
+                for line, _tag in self.all_logs:
                     f.write(line + "\n")
             QMessageBox.information(self, "Log Saved", f"Saved log to:\n{path}")
         except Exception as e:
@@ -320,15 +369,41 @@ class MainWindow(QWidget):
         pct = int((c / t) * 100) if t else 0
         self.progress.setFormat(f"{c} / {t} ({pct}%)")
 
-    def on_finished(self, result) -> None:
+    def _on_worker_finished(self, result, *, full_scan: bool) -> None:
         self._set_scan_running(False)
-        if result is None:
+        if result is not None:
+            if full_scan:
+                self._replace_last_results(result)
+            else:
+                self._merge_last_results(result)
+            label = "Scan completed" if full_scan else "Run finished"
+            if result.xlsx_path:
+                self.append_log(f"[INFO] {label}. Excel: {result.xlsx_path}", tag="INFO")
+            else:
+                self.append_log(f"[INFO] {label}", tag="INFO")
+            if result.csv_path:
+                self.append_log(f"[INFO] CSV export: {result.csv_path}", tag="INFO")
+            if full_scan:
+                self.append_log(f"[INFO] Results refreshed: {len(self.last_results)} devices", tag="INFO")
+        if self._close_after_run:
+            self._wait_for_worker_thread()
+            self.close()
+
+    def _wait_for_worker_thread(self) -> None:
+        """Let the finished worker thread exit before the window goes away."""
+        thread = self.worker_thread
+        if thread is None:
             return
-        self._update_last_results(result)
-        if result.xlsx_path:
-            self.append_log(f"[INFO] Finished. Excel: {result.xlsx_path}", tag="INFO")
-        if result.csv_path:
-            self.append_log(f"[INFO] CSV export: {result.csv_path}", tag="INFO")
+        try:
+            thread.wait(5000)
+        except RuntimeError:
+            pass  # Qt object already deleted - nothing left to wait for
+
+    def scan_done(self, result) -> None:
+        self._on_worker_finished(result, full_scan=True)
+
+    def on_finished(self, result) -> None:
+        self._on_worker_finished(result, full_scan=False)
 
     def on_start(self) -> None:
         if self._scan_running:
@@ -351,6 +426,7 @@ class MainWindow(QWidget):
             QMessageBox.warning(self, "No Valid IPs", "No valid IP addresses found. Check your input format.\n\nExamples:\n• 192.168.1.1\n• 192.168.1.1-50")
             return
 
+        self._save_settings()
         self._set_scan_running(True)
         self.worker, self.worker_thread = self._start_worker(
             ips=ips,
@@ -371,23 +447,11 @@ class MainWindow(QWidget):
         self.spin_threads.setEnabled(not running)
         self.spin_timeout.setEnabled(not running)
         self.spin_retries.setEnabled(not running)
+        self.txt_password.setEnabled(not running)
         self.btn_pick.setEnabled(not running)
         self.btn_select.setEnabled(not running)
         self.btn_lite.setEnabled(not running)
         self.btn_full.setEnabled(not running)
-
-    def scan_done(self, result) -> None:
-        self._set_scan_running(False)
-        if result is None:
-            return
-        self._update_last_results(result)
-        if result.xlsx_path:
-            self.append_log(f"[INFO] Scan completed. Excel: {result.xlsx_path}", tag="INFO")
-        else:
-            self.append_log("[INFO] Scan completed", tag="INFO")
-        if result.csv_path:
-            self.append_log(f"[INFO] CSV export: {result.csv_path}", tag="INFO")
-        self.append_log(f"[INFO] Results refreshed: {len(self.last_results)} devices", tag="INFO")
 
     def open_selection(self) -> None:
         if not self.last_results:
@@ -414,6 +478,7 @@ class MainWindow(QWidget):
             return
         selected_ips = set(self.last_cmds_selected + self.last_fw_selected)
         commands = [ln.strip() for ln in self.txt_cmds.toPlainText().splitlines() if ln.strip()]
+        self._save_settings()
         self._set_scan_running(True)
         self.worker, self.worker_thread = self._start_worker(
             ips=list(selected_ips),
@@ -453,6 +518,7 @@ class MainWindow(QWidget):
             info_mode=self.info_mode,
             cmd_ips=cmd_ips,
             fw_ips=fw_ips,
+            web_password=self.txt_password.text(),
         )
         thread = QThread(self)
         worker.moveToThread(thread)
@@ -466,9 +532,17 @@ class MainWindow(QWidget):
         thread.start()
         return worker, thread
 
-    def _update_last_results(self, result) -> None:
+    def _replace_last_results(self, result) -> None:
         devices = [r for r in (result.results or []) if r.Ok]
         self.last_results = sorted(devices, key=lambda r: (r.Name or "").lower())
+
+    def _merge_last_results(self, result) -> None:
+        """Update devices touched by a run without dropping the rest of the scan."""
+        by_ip = {r.IP: r for r in self.last_results}
+        for device in result.results or []:
+            if device.Ok:
+                by_ip[device.IP] = device
+        self.last_results = sorted(by_ip.values(), key=lambda r: (r.Name or "").lower())
 
 # ============================
 # Entry

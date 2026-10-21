@@ -18,14 +18,27 @@ from kivy.utils import platform
 from tasmota.constants import (
     ANDROID_THREAD_DEFAULT,
     ANDROID_THREAD_MAX,
-    DEFAULT_IP_RANGES,
     DEFAULT_RETRIES,
     DEFAULT_THREADS,
     DEFAULT_TIMEOUT,
     DESKTOP_THREAD_MAX,
 )
+from tasmota.core.settings import UserSettings
 
 from .widgets.common import BorderedGridLayout, format_progress
+
+
+def parse_number(text: str, kind: type, default):
+    """Parse a TextInput value; fall back to ``default`` on empty/invalid input.
+
+    input_filter="float" still allows text such as "." or "1.2.3".
+    """
+    try:
+        value = kind(str(text).strip())
+    except (TypeError, ValueError):
+        return default
+    return value if value > 0 else default
+
 
 class DiscoveryPanel(BoxLayout):
     """Inputs for discovery settings."""
@@ -36,22 +49,28 @@ class DiscoveryPanel(BoxLayout):
         self,
         discover_callback: Callable[[Dict], None],
         cancel_callback: Optional[Callable[[], None]] = None,
+        settings: Optional[UserSettings] = None,
         **kwargs,
     ):
         super().__init__(orientation="vertical", spacing=dp(8), **kwargs)
         self.discover_callback = discover_callback
         self.cancel_callback = cancel_callback
         self._busy = False
+        settings = settings or UserSettings()
 
         self._default_threads = self._determine_default_threads()
         self._max_threads = self._determine_max_threads()
 
         self.thread_input = TextInput(
-            text=str(self._default_threads), multiline=False, input_filter="int"
+            text=str(self.clamp_threads(settings.threads)), multiline=False, input_filter="int"
         )
-        self.timeout_input = TextInput(text=str(DEFAULT_TIMEOUT), multiline=False, input_filter="float")
-        self.retries_input = TextInput(text=str(DEFAULT_RETRIES), multiline=False, input_filter="int")
-        self.range_input = TextInput(text=DEFAULT_IP_RANGES, size_hint_y=None, height=dp(120))
+        self.timeout_input = TextInput(text=f"{settings.timeout:g}", multiline=False, input_filter="float")
+        self.retries_input = TextInput(text=str(settings.retries), multiline=False, input_filter="int")
+        self.password_input = TextInput(
+            text=settings.web_password, multiline=False, password=True, hint_text="only if WebPassword set"
+        )
+        self.range_input = TextInput(text=settings.ip_ranges, size_hint_y=None, height=dp(120))
+        self.info_mode = settings.info_mode
 
         self.progress_box = BoxLayout(
             orientation="vertical",
@@ -76,7 +95,7 @@ class DiscoveryPanel(BoxLayout):
         grid = BorderedGridLayout(
             cols=2,
             size_hint_y=None,
-            height=dp(152),
+            height=dp(200),
             row_default_height=dp(40),
             row_force_default=True,
             spacing=dp(8),
@@ -88,10 +107,14 @@ class DiscoveryPanel(BoxLayout):
         grid.add_widget(self.timeout_input)
         grid.add_widget(Label(text="Retries"))
         grid.add_widget(self.retries_input)
+        grid.add_widget(Label(text="Web password"))
+        grid.add_widget(self.password_input)
         self.add_widget(grid)
 
         mode_box = BoxLayout(size_hint_y=None, height=dp(52), spacing=dp(8))
-        self.mode_spinner = Spinner(text="Lite", values=("Lite", "Full"), size_hint=(None, 1), width=dp(140))
+        self.mode_spinner = Spinner(
+            text=self.info_mode.capitalize(), values=("Lite", "Full"), size_hint=(None, 1), width=dp(140)
+        )
         self.mode_spinner.bind(text=self._on_mode_change)
         mode_box.add_widget(Label(text="Info Mode", size_hint=(0.6, 1)))
         mode_box.add_widget(self.mode_spinner)
@@ -118,11 +141,27 @@ class DiscoveryPanel(BoxLayout):
     def get_parameters(self) -> Dict:
         return {
             "threads": self.get_thread_count(),
-            "timeout": float(self.timeout_input.text or DEFAULT_TIMEOUT),
-            "retries": int(self.retries_input.text or DEFAULT_RETRIES),
+            "timeout": self.get_timeout(),
+            "retries": self.get_retries(),
             "ip_ranges": self.range_input.text,
             "info_mode": self.info_mode,
+            "web_password": self.password_input.text,
         }
+
+    def get_timeout(self) -> float:
+        return parse_number(self.timeout_input.text, float, float(DEFAULT_TIMEOUT))
+
+    def get_retries(self) -> int:
+        return parse_number(self.retries_input.text, int, DEFAULT_RETRIES)
+
+    def apply_to_settings(self, settings: UserSettings) -> None:
+        """Copy the current inputs into ``settings`` for saving."""
+        settings.ip_ranges = self.range_input.text
+        settings.threads = self.get_thread_count()
+        settings.timeout = self.get_timeout()
+        settings.retries = self.get_retries()
+        settings.info_mode = self.info_mode
+        settings.web_password = self.password_input.text
 
     def get_thread_count(self) -> int:
         threads = self.clamp_threads(self.thread_input.text)
@@ -158,6 +197,7 @@ class DiscoveryPanel(BoxLayout):
         self.thread_input.disabled = busy
         self.timeout_input.disabled = busy
         self.retries_input.disabled = busy
+        self.password_input.disabled = busy
         self.range_input.disabled = busy
         self.mode_spinner.disabled = busy
         self.btn_discover.text = "Cancel Scan" if busy else "Start Scan"

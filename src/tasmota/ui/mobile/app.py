@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import threading
-from typing import Callable, Dict, Iterable, List, Optional, Tuple
+from collections import deque
+from typing import Callable, Deque, Dict, Iterable, List, Optional, Tuple
 
 from kivy.app import App
 from kivy.clock import Clock
@@ -11,9 +12,11 @@ from kivy.metrics import dp
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.tabbedpanel import TabbedPanel, TabbedPanelItem
+from kivy.utils import platform
 
 from tasmota.core.bulk import BulkRunResult, TasmotaBulkExecutor
 from tasmota.core.commands import CommandLibraryError, load_command_library
+from tasmota.core.settings import SettingsStore
 from tasmota.constants import (
     DEFAULT_BACKOFF,
     DEFAULT_IP_RANGES,
@@ -22,7 +25,7 @@ from tasmota.constants import (
     DEFAULT_TIMEOUT,
     OTA_URLS,
 )
-from tasmota.core.utils import build_ip_list, is_valid_ip, parse_ip_range, validate_ip_ranges
+from tasmota.core.utils import validate_ip_ranges
 
 from .boot import BootSequence
 from .command_library import CommandLibraryPanel
@@ -58,7 +61,11 @@ class RootLayout(TabbedPanel):
 
     def __init__(self, **kwargs):
         ready_callback: Optional[Callable[[], None]] = kwargs.pop("ready_callback", None)
+        self.settings_store: SettingsStore = kwargs.pop("settings_store", None) or SettingsStore()
         super().__init__(**kwargs)
+        # Personal values (IP ranges, commands, password...) are remembered in
+        # a private settings file, see tasmota/core/settings.py.
+        self.settings, settings_warning = self.settings_store.load()
         self.do_default_tab = False
         self.tab_height = "42dp"
 
@@ -78,8 +85,10 @@ class RootLayout(TabbedPanel):
         # ----------------------------------------------------------------
         # Each panel handles one aspect of the workflow.
         # Panels receive callback functions to communicate with this coordinator.
-        self.discovery_panel = DiscoveryPanel(self._on_discover, self._cancel_active_run)
-        self.command_panel = CommandLibraryPanel(self._on_run_commands, self._show_ota_tab)
+        self.discovery_panel = DiscoveryPanel(self._on_discover, self._cancel_active_run, settings=self.settings)
+        self.command_panel = CommandLibraryPanel(
+            self._on_run_commands, self._show_ota_tab, initial_commands=self.settings.commands
+        )
         self.ota_panel = OTAPanel(self._on_run_ota, self._show_commands_tab)
         self.summary_panel = SummaryPanel(
             self._queue_summary_commands,
@@ -93,6 +102,8 @@ class RootLayout(TabbedPanel):
         self._add_panel_tab("OTA", self.ota_panel)
         self._add_panel_tab("Summary", self.summary_panel)
         self._add_panel_tab("Logs", self.logs_panel)
+        if settings_warning:
+            self.logs_panel.append_line(f"[WARN] {settings_warning}")
 
         # Load command library in background (may take a moment on slow devices)
         self._load_command_library()
@@ -112,7 +123,8 @@ class RootLayout(TabbedPanel):
         # Instead of updating the UI for each one (which causes stuttering),
         # we batch them and flush every 50ms. This keeps the UI smooth.
         self._pending_progress: Tuple[int, int] = (0, 0)
-        self._pending_logs: List[str] = []
+        # Worker threads append, the UI thread pops: deque makes both atomic.
+        self._pending_logs: Deque[str] = deque()
         self._progress_trigger = Clock.create_trigger(self._flush_progress, 0.05)
         self._log_trigger = Clock.create_trigger(self._flush_logs, 0.05)
 
@@ -285,10 +297,19 @@ class RootLayout(TabbedPanel):
 
     def _flush_logs(self, dt):
         """Apply batched log lines (called at most every 50ms)."""
-        logs = self._pending_logs
-        self._pending_logs = []
-        for line in logs:
-            self.logs_panel.append_line(line)
+        while self._pending_logs:
+            self.logs_panel.append_line(self._pending_logs.popleft())
+
+    # ------------------------------------------------------------------
+    # Settings persistence
+    # ------------------------------------------------------------------
+    def save_settings(self):
+        """Store the current inputs so they are pre-filled next time."""
+        self.discovery_panel.apply_to_settings(self.settings)
+        self.settings.commands = self.command_panel.get_commands()
+        error = self.settings_store.save(self.settings)
+        if error:
+            self.logs_panel.append_line(f"[WARN] {error}")
 
     def _task_running(self) -> bool:
         thread = self.active_thread
@@ -335,10 +356,8 @@ class RootLayout(TabbedPanel):
         self.discovery_panel.hide_progress()
 
     def _read_runtime_inputs(self) -> Tuple[int, float, int, str]:
-        threads = self.discovery_panel.get_thread_count()
-        timeout = float(self.discovery_panel.timeout_input.text or DEFAULT_TIMEOUT)
-        retries = int(self.discovery_panel.retries_input.text or DEFAULT_RETRIES)
-        return threads, timeout, retries, self.discovery_panel.info_mode
+        panel = self.discovery_panel
+        return panel.get_thread_count(), panel.get_timeout(), panel.get_retries(), panel.info_mode
 
     @staticmethod
     def _ensure_list(values: Optional[Iterable[str]]) -> List[str]:
@@ -362,6 +381,7 @@ class RootLayout(TabbedPanel):
             return
 
         self._cancel_requested = False
+        self.save_settings()
         self.discovery_panel.set_busy(True)
         self.logs_panel.append_line("[INFO] Preparing discovery run…")
 
@@ -454,6 +474,7 @@ class RootLayout(TabbedPanel):
         if not commands:
             self.logs_panel.append_line("[WARN] No backlog commands configured")
             return
+        self.save_settings()
         self.command_panel.stage_command_targets(cmd_ips)
         cmd_ips = self.command_panel.get_staged_ips()
         self.logs_panel.append_line(f"[INFO] Running commands for {len(cmd_ips)} devices")
@@ -484,6 +505,7 @@ class RootLayout(TabbedPanel):
             return
 
         ota_urls = payload.get("urls", OTA_URLS)
+        self.save_settings()
         self.logs_panel.append_line(f"[INFO] Running OTA updates for {len(fw_ips)} devices")
         self.ota_panel.clear_queue()
         threads, timeout, retries, info_mode = self._read_runtime_inputs()
@@ -557,6 +579,7 @@ class RootLayout(TabbedPanel):
             info_mode=info_mode,
             cmd_ips=self._ensure_list(cmd_ips),
             fw_ips=self._ensure_list(fw_ips),
+            web_password=self.discovery_panel.password_input.text,
             progress_callback=progress_cb,
             log_callback=log_cb,
         )
@@ -598,9 +621,11 @@ class RootLayout(TabbedPanel):
             return
 
         if result is not None:
-            replace_summary = context == "discovery"
-            self.summary_panel.set_results(result.results, replace=replace_summary)
-            self.ota_panel.set_results(result.results)
+            # Only a discovery scan replaces the device lists; command and OTA
+            # runs update the devices they touched and keep the rest.
+            replace = context == "discovery"
+            self.summary_panel.set_results(result.results, replace=replace)
+            self.ota_panel.set_results(result.results, replace=replace)
             self.logs_panel.append_line("[INFO] Completed run.")
         else:
             self.summary_panel.update_progress(0, 0)
@@ -623,8 +648,19 @@ class TasmotaKivyApp(App):
 
     def build(self):
         self.title = "Tasmota Bulk Tool"
-        self.root_layout = RootLayout(ready_callback=self._boot_sequence.reveal)
+        # On Android the app folder is replaced on every update, so settings
+        # live in the private user data directory, which survives updates.
+        store = SettingsStore(self.user_data_dir) if platform == "android" else SettingsStore()
+        self.root_layout = RootLayout(ready_callback=self._boot_sequence.reveal, settings_store=store)
         return self._boot_sequence.attach(self.root_layout)
+
+    def on_pause(self):
+        # Android may kill a paused app without calling on_stop.
+        self.root_layout.save_settings()
+        return True
+
+    def on_stop(self):
+        self.root_layout.save_settings()
 
 
 def main():

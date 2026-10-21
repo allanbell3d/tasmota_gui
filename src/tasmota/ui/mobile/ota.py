@@ -191,12 +191,16 @@ class OTAPanel(BoxLayout):
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
-    def set_results(self, results):
-        """Set device results and rebuild display."""
+    def set_results(self, results, *, replace: bool = True):
+        """Set device results and rebuild display.
+
+        With replace=False, devices not in ``results`` are kept (used after
+        command/OTA runs, which only report the devices they touched).
+        """
         filtered = [device for device in results or [] if getattr(device, "Ok", False)]
 
         # Build data dict for RecycleView
-        new_data: Dict[str, Dict] = {}
+        new_data: Dict[str, Dict] = {} if replace else dict(self._device_data)
         for device in filtered:
             key = device_key(device)
             existing = self._device_data.get(key)

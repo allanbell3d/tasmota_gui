@@ -4,7 +4,6 @@ import time
 import httpx
 import pytest
 
-from tasmota.constants import OTA_URLS
 from tasmota.core.bulk import TasmotaBulkExecutor, split_backlog
 
 from conftest import status0
@@ -55,6 +54,12 @@ def test_discovery_reports_reasons(network):
     assert by_ip["10.0.0.7"].Error == "Not a Tasmota device"
     assert "timed out" in by_ip["10.0.0.8"].Error
     assert result.rows_written == 1
+
+
+@pytest.mark.parametrize("version", ["15.0.1(release-sensors)", "15.0.1(release-lite)", "14.3.0(85cff52-ir)"])
+def test_non_default_official_builds_are_detected(network, version):
+    network.add_device("10.0.0.5", version=version)
+    assert make_executor(network, ["10.0.0.5"]).run().results[0].Ok
 
 
 def test_auth_failure_is_not_retried_and_password_not_logged(network):
@@ -219,6 +224,7 @@ def test_cancel_interrupts_retry_backoff(network):
     started = time.monotonic()
     result = executor.run()
     timer.cancel()
+    assert result.results == [] or not result.results[0].Ok
     assert time.monotonic() - started < 3
     assert executor.was_cancelled
 

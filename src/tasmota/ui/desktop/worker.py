@@ -1,7 +1,7 @@
 """Worker thread helpers for the desktop UI."""
 from __future__ import annotations
 
-from typing import Iterable, Optional, Sequence
+from typing import Iterable, Mapping, Optional, Sequence
 
 from PySide6.QtCore import QObject, Signal
 
@@ -26,11 +26,12 @@ class Worker(QObject):
         send_backlog: bool,
         commands: Sequence[str],
         do_upgrade: bool = False,
-        selected_ips: Optional[Sequence[str]] = None,
-        ota_urls: Optional[Sequence[str]] = None,
+        selected_ips: Optional[Iterable[str]] = None,
+        ota_urls: Optional[Mapping[str, str]] = None,
         info_mode: str = "full",
-        cmd_ips: Optional[Sequence[str]] = None,
-        fw_ips: Optional[Sequence[str]] = None,
+        cmd_ips: Optional[Iterable[str]] = None,
+        fw_ips: Optional[Iterable[str]] = None,
+        web_password: str = "",
     ) -> None:
         super().__init__()
         self.executor = TasmotaBulkExecutor(
@@ -44,10 +45,11 @@ class Worker(QObject):
             commands,
             do_upgrade=do_upgrade,
             selected_ips=selected_ips,
-            ota_urls=ota_urls,
+            ota_urls=dict(ota_urls) if ota_urls else None,
             info_mode=info_mode,
             cmd_ips=cmd_ips,
             fw_ips=fw_ips,
+            web_password=web_password,
             progress_callback=self.progress.emit,
             log_callback=self.log_line.emit,
         )

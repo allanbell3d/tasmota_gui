@@ -64,8 +64,6 @@ from .common import (
     set_checkbox_silent,
 )
 
-# Re-export for external use
-
 # Column separator color alias (vertical lines between checkbox and info columns)
 COLUMN_SEPARATOR_COLOR = SEPARATOR_COLOR
 

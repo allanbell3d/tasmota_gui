@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 )
 
 from tasmota.constants import OTA_URLS
+from tasmota.core.ota import FAMILY_ESP32, FAMILY_ESP8266, chip_family
 
 
 class SelectionWindow(QDialog):
@@ -50,8 +51,10 @@ class SelectionWindow(QDialog):
 
         # Buttons row
         bh = QHBoxLayout()
-        self.btn_all_cmd = QPushButton("Toggle All Commands")
-        self.btn_all_fw = QPushButton("Toggle All Firmware")
+        # Toggle buttons only affect rows visible under the current filter,
+        # so a search never selects devices the user cannot see.
+        self.btn_all_cmd = QPushButton("Toggle Visible Commands")
+        self.btn_all_fw = QPushButton("Toggle Visible Firmware")
         self.btn_esp8266_cmd = QPushButton("Toggle ESP82xx Commands")
         self.btn_esp8266_fw = QPushButton("Toggle ESP82xx Firmware")
         self.btn_esp32_cmd = QPushButton("Toggle ESP32 Commands")
@@ -63,12 +66,14 @@ class SelectionWindow(QDialog):
 
         self.btn_all_cmd.clicked.connect(lambda: self.toggle_rows(range(self.table.rowCount()), 0))
         self.btn_all_fw.clicked.connect(lambda: self.toggle_rows(range(self.table.rowCount()), 1))
-        self.btn_esp8266_cmd.clicked.connect(lambda: self.toggle_hw("ESP8266", 0))
-        self.btn_esp8266_fw.clicked.connect(lambda: self.toggle_hw("ESP8266", 1))
-        self.btn_esp32_cmd.clicked.connect(lambda: self.toggle_hw("ESP32", 0))
-        self.btn_esp32_fw.clicked.connect(lambda: self.toggle_hw("ESP32", 1))
+        self.btn_esp8266_cmd.clicked.connect(lambda: self.toggle_hw(FAMILY_ESP8266, 0))
+        self.btn_esp8266_fw.clicked.connect(lambda: self.toggle_hw(FAMILY_ESP8266, 1))
+        self.btn_esp32_cmd.clicked.connect(lambda: self.toggle_hw(FAMILY_ESP32, 0))
+        self.btn_esp32_fw.clicked.connect(lambda: self.toggle_hw(FAMILY_ESP32, 1))
 
-        # OTA URL edits (session-only) + Restore Default buttons
+        # OTA URL edits (session-only) + Restore Default buttons.
+        # The ESP32 URL is the classic tasmota32.bin; C3/S3/single-core etc.
+        # automatically use tasmota32<variant>.bin from the same folder.
         ota_row1 = QHBoxLayout()
         self.txt_esp32 = QLineEdit(self.parent.ota_urls.get("ESP32", OTA_URLS["ESP32"]))
         btn_reset_esp32 = QPushButton("Restore Default")
@@ -142,6 +147,9 @@ class SelectionWindow(QDialog):
             self.table.setRowHidden(i, not match)
 
     def toggle_rows(self, indices, col):
+        indices = [i for i in indices if not self.table.isRowHidden(i)]
+        if not indices:
+            return
         all_checked = True
         for i in indices:
             widget = self.table.cellWidget(i, col)
@@ -156,13 +164,11 @@ class SelectionWindow(QDialog):
             if widget is not None:
                 widget.setChecked(new_state)
 
-    def toggle_hw(self, key, col):
+    def toggle_hw(self, family, col):
         indices = []
         for i in range(self.table.rowCount()):
-            hw = (self.table.item(i,4).text() or "").upper()
-            if key == "ESP32" and "ESP32" in hw:
-                indices.append(i)
-            if key == "ESP8266" and any(x in hw for x in ["ESP8266","ESP8285","ESP82"]):
+            item = self.table.item(i, 4)
+            if item is not None and chip_family(item.text()) == family:
                 indices.append(i)
         self.toggle_rows(indices, col)
 

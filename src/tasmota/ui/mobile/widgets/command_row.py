@@ -22,7 +22,6 @@ Main Components:
 
 from __future__ import annotations
 
-from kivy.graphics import Color, Line
 from kivy.metrics import dp
 from kivy.properties import BooleanProperty, NumericProperty, StringProperty
 from kivy.uix.anchorlayout import AnchorLayout

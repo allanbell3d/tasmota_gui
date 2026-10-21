@@ -43,6 +43,27 @@ from tasmota.constants import (
     SEPARATOR_COLOR,
     SUMMARY_HEADER_TEXT_COLOR,
 )
+from tasmota.core.ota import FAMILY_UNKNOWN, chip_family
+
+# Colour constants are re-exported so widget modules import from one place.
+__all__ = [
+    "BORDER_COLOR",
+    "CATEGORY_LABEL_COLOR",
+    "CHECKBOX_COLOR",
+    "ESP_PLATFORM_COLORS",
+    "ESP_PLATFORM_TEXT_COLOR",
+    "FALLBACK_BG_COLOR",
+    "SEPARATOR_COLOR",
+    "SUMMARY_HEADER_TEXT_COLOR",
+    "BorderedBoxLayout",
+    "BorderedGridLayout",
+    "BorderedWidgetMixin",
+    "bind_auto_wrap",
+    "device_key",
+    "format_progress",
+    "get_device_platform",
+    "set_checkbox_silent",
+]
 
 
 def format_progress(done: int, total: int) -> Tuple[int, int, int]:
@@ -150,16 +171,15 @@ def get_device_platform(device) -> str:
         device: A DeviceResult object from discovery, with Hardware/Platform/ChipId attrs
 
     Returns:
-        "ESP32", "ESP8266", or "UNKNOWN" if platform can't be determined
+        "ESP32", "ESP8266", or "UNKNOWN" if platform can't be determined.
+        ESP32 variants (C3, S3, ESP8685...) all count as "ESP32"; the exact
+        firmware image is chosen later by tasmota.core.ota.
     """
-    fragments = " ".join(
-        str(getattr(device, attr, "") or "") for attr in ("Hardware", "Platform", "ChipId")
-    ).upper()
-    if "ESP32" in fragments:
-        return "ESP32"
-    if "ESP82" in fragments or "ESP8266" in fragments:
-        return "ESP8266"
-    return "UNKNOWN"
+    for attr in ("Hardware", "Platform", "ChipId"):
+        family = chip_family(str(getattr(device, attr, "") or ""))
+        if family != FAMILY_UNKNOWN:
+            return family
+    return FAMILY_UNKNOWN
 
 
 class BorderedWidgetMixin:
@@ -240,12 +260,12 @@ class BorderedWidgetMixin:
     def _separator_points(self) -> List[Tuple[float, float, float, float]]:
         points: List[Tuple[float, float, float, float]] = []
         if hasattr(self, "orientation"):
-            if getattr(self, "orientation") == "horizontal":
+            if self.orientation == "horizontal":
                 ordered = sorted(self.children, key=lambda child: child.x)
                 for left, right in zip(ordered[:-1], ordered[1:]):
                     x = (left.right + right.x) / 2.0
                     points.append((x, self.y, x, self.top))
-            elif getattr(self, "orientation") == "vertical":
+            elif self.orientation == "vertical":
                 ordered = sorted(self.children, key=lambda child: child.y)
                 for lower, upper in zip(ordered[:-1], ordered[1:]):
                     y = (lower.top + upper.y) / 2.0

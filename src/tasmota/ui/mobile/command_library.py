@@ -13,7 +13,7 @@ from kivy.uix.popup import Popup
 from kivy.uix.spinner import Spinner
 from kivy.uix.textinput import TextInput
 
-from tasmota.core.commands import DEFAULT_COMMANDS, CommandRecord, extract_categories
+from tasmota.core.commands import CommandRecord, extract_categories
 
 from .widgets.common import BorderedBoxLayout, bind_auto_wrap
 from .widgets.command_row import (
@@ -32,6 +32,7 @@ class CommandLibraryPanel(BoxLayout):
         self,
         send_callback: Callable[[Dict], None],
         goto_ota_callback: Optional[Callable[[], None]] = None,
+        initial_commands: Optional[Iterable[str]] = None,
         **kwargs,
     ):
         super().__init__(orientation="vertical", spacing=dp(8), **kwargs)
@@ -46,7 +47,7 @@ class CommandLibraryPanel(BoxLayout):
         self._ensure_library_components()
 
         self.backlog_label = Label(text="Backlog Commands", size_hint_y=None, height=dp(36))
-        self.backlog_input = TextInput(text="\n".join(DEFAULT_COMMANDS), multiline=True, size_hint=(1, 0.4))
+        self.backlog_input = TextInput(text="\n".join(initial_commands or []), multiline=True, size_hint=(1, 0.4))
 
         self.add_widget(self.backlog_label)
         self.add_widget(self.backlog_input)
@@ -321,9 +322,13 @@ class CommandLibraryPanel(BoxLayout):
         identifier = "::".join(part for part in (base, value, category) if part)
         return identifier or base
 
+    def get_commands(self) -> List[str]:
+        """Return the backlog editor contents, one command per line."""
+        return [line.strip() for line in self.backlog_input.text.splitlines() if line.strip()]
+
     def _emit_send(self):
         options = {
-            "commands": [line.strip() for line in self.backlog_input.text.splitlines() if line.strip()],
+            "commands": self.get_commands(),
             "ips": self.get_staged_ips(),
         }
         if self.send_callback:

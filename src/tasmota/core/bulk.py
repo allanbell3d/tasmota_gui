@@ -546,8 +546,11 @@ class TasmotaBulkExecutor:
         statusmem = status0.get("StatusMEM", {}) or {}
         statussts = status0.get("StatusSTS", {}) or {}
 
-        version = str(statusfwr.get("Version", "") or "")
-        if not version or "tasmota" not in version.lower():
+        # Version is "<x.y.z>(<sha or release>-<image>)", e.g.
+        # "15.0.1(release-sensors)"; the image name need not contain
+        # "tasmota", so identify Tasmota by the Status 0 structure instead.
+        version = str(statusfwr.get("Version", "") or "") if isinstance(statusfwr, dict) else ""
+        if not version or not isinstance(status, dict) or not status:
             result.Error = "Not a Tasmota device"
             return result
 

@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tasmota-bulk-tool"
+version = "0.3.0"
+description = "Discover, configure and OTA-update Tasmota devices in bulk (PySide6 desktop + Kivy mobile)"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["httpx>=0.24.0"]
+
+[project.optional-dependencies]
+export = ["pandas>=2.0.0", "openpyxl>=3.1.0"]
+desktop = ["PySide6>=6.5.0", "pandas>=2.0.0", "openpyxl>=3.1.0"]
+mobile = ["kivy>=2.2.0"]
+dev = ["pytest>=7", "ruff>=0.4"]
+
+[project.gui-scripts]
+tasmota-bulk-desktop = "tasmota.ui.desktop.app:main"
+tasmota-bulk-mobile = "tasmota.ui.mobile.app:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+extend-exclude = ["assets", "platform"]
+
+[tool.ruff.lint]
+# Errors, pyflakes and bugbear. zip(strict=) is not needed for these UI loops.
+select = ["E9", "F", "B"]
+ignore = ["B905"]
