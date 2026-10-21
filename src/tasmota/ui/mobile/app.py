@@ -18,6 +18,7 @@ from tasmota.core.bulk import BulkRunResult, TasmotaBulkExecutor
 from tasmota.core.commands import CommandLibraryError, load_command_library
 from tasmota.core.settings import SettingsStore
 from tasmota.constants import (
+    ANDROID_THREAD_DEFAULT,
     DEFAULT_BACKOFF,
     DEFAULT_IP_RANGES,
     DEFAULT_RETRIES,
@@ -66,6 +67,10 @@ class RootLayout(TabbedPanel):
         # Personal values (IP ranges, commands, password...) are remembered in
         # a private settings file, see tasmota/core/settings.py.
         self.settings, settings_warning = self.settings_store.load()
+        if platform == "android" and self.settings_store.loaded_from is None:
+            # First run on a phone: start from the Android thread default
+            # rather than the desktop one.
+            self.settings.threads = ANDROID_THREAD_DEFAULT
         self.do_default_tab = False
         self.tab_height = "42dp"
 

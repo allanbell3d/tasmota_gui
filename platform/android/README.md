@@ -70,13 +70,15 @@ closed.
 
 ## Runtime defaults on Android
 
-* Discovery now defaults to **20 worker threads** on Android (clamped to a maximum of 32) via the shared `constants.ANDROID_THREAD_DEFAULT` and `ANDROID_THREAD_MAX` values, reducing CPU contention on phones and tablets.
-* Command and OTA runs reuse the same Android-specific limits so scans stay responsive while you browse other tabs.
+* Discovery defaults to **64 worker threads** on Android (clamped to a maximum of 128) via `constants.ANDROID_THREAD_DEFAULT` / `ANDROID_THREAD_MAX`. Scanning is bound by the timeout, not the CPU: about `ceil(hosts / threads) × timeout`. Measured with 254 unresponsive hosts and a 1 s timeout: 20 threads 13.2 s, 64 threads 4.1 s, 128 threads 2.2 s, with ~0.4 s CPU in every case. If a phone or access point struggles, lower the Threads field (it is remembered).
+* The Logs tab renders only the visible lines (RecycleView). It keeps the last 1000 lines and only follows new output while you are scrolled to the bottom.
+* The APK no longer contains pandas, numpy or openpyxl. They are only needed for the desktop Excel/CSV export, which the mobile app doesn't do.
+* The splash uses `assets/images/logo.jpg` (128 KB) instead of the 1.1 MB `logo.png`.
 
 ## Troubleshooting
 
 * **Missing dependencies** – Run `buildozer android clean` to clear the build cache and rebuild.
 * **Gradle errors** – Delete the `.buildozer` directory and retry to force a clean toolchain download.
-* **Large APK size** – Remove unused Python modules from `requirements` or enable [Python module blacklist](https://buildozer.readthedocs.io/en/latest/specifications.html#p4a-blacklist-requirements).
+* **Large APK size** – Keep `requirements` to what the mobile app imports. The export-only packages are already left out. You can also use the [Python module blacklist](https://buildozer.readthedocs.io/en/latest/specifications.html#p4a-blacklist-requirements).
 
 The Buildozer workflow replaces the previous Android Studio instructions and keeps the mobile build aligned with the shared Python networking stack.

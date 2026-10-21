@@ -467,3 +467,13 @@ def test_pause_after_user_backlog_line(network):
     started = time.monotonic()
     executor.run()
     assert time.monotonic() - started >= 0.3  # 3 queued entries x 0.1 s
+
+
+def test_httpx_request_logging_is_silenced(network, caplog):
+    import logging
+
+    network.add_device("10.0.0.5", handler=needs_password())
+    with caplog.at_level(logging.DEBUG):
+        make_executor(network, ["10.0.0.5"], web_password="s3cret").run()
+    assert not any("s3cret" in record.getMessage() for record in caplog.records)
+    assert not any(record.name.startswith(("httpx", "httpcore")) for record in caplog.records)

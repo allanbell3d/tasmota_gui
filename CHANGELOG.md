@@ -9,6 +9,40 @@ This project follows **semantic versioning**:
 ---
 
 ## [Unreleased]
+### Performance (Android)
+- **Log panel virtualised (RecycleView).** Before, every log line was its own
+  markup Label, and a scan logs one line per unreachable IP. Profiled:
+  ~1.5 ms of UI-thread work per line, 40–46 frames over 33 ms and stalls of
+  up to ~240 ms while 1000 lines arrived. Now: 1–6 slow frames, worst ~35–40
+  ms (Xvfb/llvmpipe, same workload). History raised from 100 to 1000 lines;
+  the view follows new output only while scrolled to the bottom.
+- **Faster scans on phones.** Android thread default 20 → 64, cap 32 → 128.
+  Measured: 254 unresponsive hosts at 1 s timeout take 13.2 s at 20 threads,
+  4.1 s at 64 and 2.2 s at 128, with ~0.4 s CPU throughout. Needs
+  confirmation on a real phone and access point.
+- **Smaller APK.** pandas, numpy, openpyxl, et-xmlfile, python-dateutil and pytz
+  removed from `buildozer.spec` (~86 MB installed on desktop). They are only
+  used by the desktop export; the mobile import graph and a scan were verified
+  with them blocked.
+- **Lighter splash.** `logo.jpg` (128 KB) replaces the 1.1 MB `logo.png` for the
+  splash and presplash: Kivy load+upload 39 ms → 16 ms on desktop. The PNG
+  stays as the source and is excluded from the APK.
+
+### Fixed
+- **Web password leaked into logs.** httpx logs every request URL at INFO, and
+  Kivy writes Python logging to its log file and logcat. After a device asked
+  for the password, `password=...` was written there in plain text, one line
+  per request. httpx/httpcore logging is now limited to warnings.
+- **Mobile log colours.** Executor lines start with a timestamp, so their tag
+  was never recognised and errors such as "OTA skipped" showed in green.
+  Errors are red, OTA blue, commands purple, unreachable hosts amber.
+- **Android thread default unused.** On a first run, settings defaulted to the
+  desktop value (100), so the Android default was never applied.
+- **Settings:** hand-edited `ip_ranges` (list) and `commands` (text) are
+  accepted; values that can't be used are kept as `_invalid_<key>` instead
+  of being dropped on the next save.
+- **Redaction:** a very short password no longer mangles unrelated text
+  (e.g. "HTTP 401").
 
 ---
 

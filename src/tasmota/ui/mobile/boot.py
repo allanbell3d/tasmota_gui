@@ -19,15 +19,22 @@ from tasmota.core.utils import candidate_asset_roots
 __all__ = ["BootSequence", "LogoSplash"]
 
 
+# logo.jpg: 128 KB, decodes in ~16 ms vs ~39 ms for the 1.1 MB logo.png
+# (measured with Kivy CoreImage on desktop; phones are slower). The PNG
+# stays as the full-quality source and fallback.
+_LOGO_NAMES = ("logo.jpg", "logo.png")
+
+
 def _resolve_logo_path() -> str:
     """Return the path to the bundled splash logo image."""
 
     module_path = Path(__file__).resolve()
 
     for root in candidate_asset_roots(module_path):
-        candidate = root / "assets" / "images" / "logo.png"
-        if candidate.exists():
-            return str(candidate)
+        for name in _LOGO_NAMES:
+            candidate = root / "assets" / "images" / name
+            if candidate.exists():
+                return str(candidate)
 
     # Fallback to the historical repository layout relative to the source tree.
     if len(module_path.parents) >= 3:

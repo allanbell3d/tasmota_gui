@@ -21,7 +21,7 @@ ROOT = os.path.abspath(os.path.join(SPECPATH, "..", ".."))
 
 datas = [
     (os.path.join(ROOT, "assets", "commands", "tasmota_commands.json"), os.path.join("assets", "commands")),
-    (os.path.join(ROOT, "assets", "images", "logo.png"), os.path.join("assets", "images")),
+    (os.path.join(ROOT, "assets", "images", "logo.jpg"), os.path.join("assets", "images")),
 ]
 _seed = os.path.join(ROOT, ".private", "tasmota_settings.json")
 if os.path.isfile(_seed):

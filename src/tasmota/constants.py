@@ -62,13 +62,20 @@ DEFAULT_BACKOFF = 1.0
 # Mobile devices (Android) have less RAM and CPU than desktops.
 # These limits prevent the app from overwhelming mobile hardware.
 #
-# ANDROID_THREAD_DEFAULT: Starting value for Android (conservative)
-# ANDROID_THREAD_MAX: Hard cap for Android to prevent crashes
+# ANDROID_THREAD_DEFAULT: Starting value for Android
+# ANDROID_THREAD_MAX: Hard cap for Android
+#
+# Scan time is bound by the timeout, not the CPU: roughly
+# ceil(hosts / threads) * timeout. Measured (254 unresponsive hosts, 1 s
+# timeout): 20 threads 13.2 s, 32 threads 8.1 s, 64 threads 4.1 s, 128
+# threads 2.2 s; CPU ~0.4 s and +5 MB RSS throughout. The old Android values
+# (20 / 32) dated from when every log line was a widget; the log panel now
+# renders only visible rows. Lower these if a phone or access point struggles.
 # DESKTOP_THREAD_MAX: Cap for the Kivy UI when previewed on a desktop
 #   (the PySide6 desktop app uses MAX_THREADS below)
 # =============================================================================
-ANDROID_THREAD_DEFAULT = 20
-ANDROID_THREAD_MAX = 32
+ANDROID_THREAD_DEFAULT = 64
+ANDROID_THREAD_MAX = 128
 DESKTOP_THREAD_MAX = 128
 
 # =============================================================================
@@ -218,7 +225,7 @@ MAX_THREADS = 1000      # Reasonable upper limit for concurrent connections
 # Controls the scrolling log display in the mobile UI.
 # Older lines are removed when the buffer fills up to prevent memory bloat.
 # =============================================================================
-LOG_PANEL_MAX_LINES = 100   # Maximum log lines to keep in memory/display
+LOG_PANEL_MAX_LINES = 1000  # Lines kept; only visible rows are rendered (RecycleView)
 
 # =============================================================================
 # Default Backlog Commands

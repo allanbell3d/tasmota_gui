@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import re
 import threading
@@ -74,6 +75,13 @@ from tasmota.constants import (
 )
 from .ota import INTERMEDIATE_IMAGES, firmware_image, is_stock_ota_url, resolve_ota_url
 from .utils import safe_extract_json
+
+# httpx logs every request at INFO with the full URL, including the
+# password=... query parameter. Kivy routes Python logging to its log file
+# and logcat, so on Android that wrote one line per scanned IP and leaked the
+# web password. The executor reports outcomes through log_callback instead.
+for _name in ("httpx", "httpcore"):
+    logging.getLogger(_name).setLevel(logging.WARNING)
 
 LogCallback = Callable[[str, str], None]
 ProgressCallback = Callable[[int, int], None]
